@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GardenMaster Éditeur</title>
+    <!-- Google Fonts & Material Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <!-- Chemin direct vers le fichier CSS -->
+    <link rel="stylesheet" href="editor.css">
+</head>
+<body>
+    <header class="top-bar">
+        <div class="app-title">GardenMaster</div>
+        <div class="tool-buttons-container">
+            <button id="addPointsButton" class="tool-button" data-tooltip="Ajouter un point">
+                <span class="material-icons">add_circle_outline</span>
+            </button>
+            <button id="moveButton" class="tool-button" data-tooltip="Déplacer l'image">
+                <span class="material-icons">open_with</span>
+            </button>
+            <button id="zoomInButton" class="tool-button" data-tooltip="Zoomer">
+                <span class="material-icons">zoom_in</span>
+            </button>
+            <button id="zoomOutButton" class="tool-button" data-tooltip="Dézoomer">
+                <span class="material-icons">zoom_out</span>
+            </button>
+            <button id="undoButton" class="tool-button" data-tooltip="Annuler le dernier point">
+                <span class="material-icons">replay</span>
+            </button>
+            <button id="saveButton" class="tool-button" data-tooltip="Sauvegarder">
+                <span class="material-icons">save</span>
+            </button>
+        </div>
+    </header>
+
+    <div class="editor-area">
+        <div class="canvas-container">
+            <canvas id="drawingCanvas"></canvas>
+        </div>
+    </div>
+
+    <!-- Charger le fichier JS directement -->
+    <script src="editor.js"></script>
+</body>
+</html>
