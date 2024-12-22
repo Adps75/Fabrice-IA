@@ -239,15 +239,21 @@ document.getElementById("undoButton").addEventListener("click", () => {
 });
 
 document.getElementById("saveButton").addEventListener("click", () => {
-    fetch("/save_annotation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            image_name: imageName,
-            annotations: annotations
-        })
-    })
-    .then(response => response.json())
-    .then(data => alert(data.message))
-    .catch(err => console.error(err));
+    const maskData = generateMask(); // Placeholder pour la génération du masque
+
+    const annotationData = {
+        annotations: annotations,
+        mask: maskData
+    };
+
+    // Envoyer les données à Bubble
+    parent.postMessage(
+        {
+            type: "save_annotation",
+            data: annotationData
+        },
+        "*"
+    );
+
+    alert("Annotation envoyée à Bubble !");
 });
