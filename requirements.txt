@@ -1,3 +1,4 @@
 pip
 flask
 wheel
+opencv-python
