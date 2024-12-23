@@ -1,259 +1,162 @@
-// Variables globales
-const canvas = document.getElementById("drawingCanvas");
-const ctx = canvas.getContext("2d");
+from flask import Flask, request, jsonify, send_from_directory, render_template
+import os
+import cv2
+import numpy as np
+import requests
 
-let image = new Image();
-let annotations = [];
-let mode = "add"; // "add" ou "move"
+app = Flask(__name__)
 
-let baseScale = 1.0;  
-let scale = 1.0;      
-let offsetX = 0, offsetY = 0; 
+# Dossiers
+UPLOAD_FOLDER = "static/images"
+ICON_FOLDER = "static/icons"
+MASK_FOLDER = "static/masks"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(MASK_FOLDER, exist_ok=True)
 
-let isDragging = false;
-let startX, startY;
+# Limite de taille pour les fichiers (16 MB)
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 
-let dashOffset = 0; // Pour l'animation des traits pointillés
+# Dictionnaire pour stocker les annotations
+annotations = {}
 
-// Fonction pour récupérer les paramètres de l'URL
-function getQueryParam(param) {
-    const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get(param);
-}
+@app.route("/")
+def home():
+    app.logger.info("Route principale appelée.")
+    return "Bienvenue sur l'éditeur Python pour Bubble !"
 
-// Récupérer l'URL de l'image depuis les paramètres
-const imageName = getQueryParam("image_url");
+# Récupérer une image
+@app.route("/get_image/<filename>", methods=["GET"])
+def get_image(filename):
+    try:
+        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        if not os.path.exists(file_path):
+            app.logger.error(f"Image non trouvée : {filename}")
+            return jsonify({"success": False, "message": "Image non trouvée"}), 404
+        return send_from_directory(UPLOAD_FOLDER, filename)
+    except Exception as e:
+        app.logger.error(f"Erreur lors de l'accès à l'image : {e}")
+        return jsonify({"success": False, "message": "Erreur interne"}), 500
 
-if (!imageName) {
-    alert("Aucune image spécifiée dans l'URL !");
-} else {
-    image.src = imageName; // Charger l'image directement depuis l'URL
-    image.onload = () => {
-        setupCanvas();
-        resetView();
-        redrawCanvas();
-    };
-}
+# Récupérer une icône (si nécessaire)
+@app.route("/get_icon/<filename>", methods=["GET"])
+def get_icon(filename):
+    try:
+        file_path = os.path.join(ICON_FOLDER, filename)
+        if not os.path.exists(file_path):
+            app.logger.error(f"Icône non trouvée : {filename}")
+            return jsonify({"success": False, "message": "Icône non trouvée"}), 404
+        return send_from_directory(ICON_FOLDER, filename)
+    except Exception as e:
+        app.logger.error(f"Erreur lors de l'accès à l'icône : {e}")
+        return jsonify({"success": False, "message": "Erreur interne"}), 500
 
-// Redimensionner en fonction de la fenêtre
-window.addEventListener('resize', () => {
-    setupCanvas();
-    resetView();
-    redrawCanvas();
-});
+# Éditeur interactif
+@app.route("/editor/<image_name>", methods=["GET"])
+def editor(image_name):
+    try:
+        app.logger.info(f"Chargement de l'éditeur pour l'image : {image_name}")
+        return render_template("editor.html", image_name=image_name)
+    except Exception as e:
+        app.logger.error(f"Erreur lors du chargement de l'éditeur : {e}")
+        return "Erreur lors du chargement de l'éditeur", 500
 
-function setupCanvas() {
-    const container = document.querySelector(".canvas-container");
-    const w = container.clientWidth;
-    const h = container.clientHeight;
-    canvas.width = w;
-    canvas.height = h;
+# Télécharger une image depuis une URL
+def download_image(url, save_path):
+    try:
+        response = requests.get(url, stream=True)
+        if response.status_code == 200:
+            with open(save_path, 'wb') as f:
+                for chunk in response.iter_content(1024):
+                    f.write(chunk)
+            return True
+        else:
+            app.logger.error(f"Erreur lors du téléchargement de l'image : {response.status_code}")
+            return False
+    except Exception as e:
+        app.logger.error(f"Erreur lors du téléchargement de l'image : {e}")
+        return False
 
-    const scaleX = w / image.width;
-    const scaleY = h / image.height;
-    baseScale = Math.min(scaleX, scaleY);
-}
+# Sauvegarder les annotations et générer un masque
+@app.route("/save_annotation", methods=["POST"])
+def save_annotation():
+    try:
+        data = request.json
+        image_name = data.get("image_name")
+        new_annotations = data.get("annotations", [])
 
-function resetView() {
-    scale = baseScale;
-    offsetX = (canvas.width - image.width * scale) / 2;
-    offsetY = (canvas.height - image.height * scale) / 2;
-}
+        if not image_name or not isinstance(new_annotations, list):
+            app.logger.warning("Nom de l'image ou annotations manquants ou incorrects.")
+            return jsonify({"success": False, "message": "Nom de l'image ou annotations manquants ou incorrects."}), 400
 
-function redrawCanvas() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.save();
-    ctx.translate(offsetX, offsetY);
-    ctx.scale(scale, scale);
-    ctx.drawImage(image, 0, 0, image.width, image.height);
-    drawAnnotations();
-    ctx.restore();
-}
+        # Vérifier chaque annotation
+        for annotation in new_annotations:
+            if not isinstance(annotation, dict) or "x" not in annotation or "y" not in annotation:
+                app.logger.warning("Annotations mal formatées.")
+                return jsonify({"success": False, "message": "Annotations mal formatées."}), 400
 
-function drawAnnotations() {
-    if (annotations.length === 0) return;
+        if image_name not in annotations:
+            annotations[image_name] = []
+        annotations[image_name].extend(new_annotations)
 
-    ctx.beginPath();
-    ctx.lineWidth = 2 / scale;
-    ctx.moveTo(annotations[0].x, annotations[0].y);
-    for (let i = 1; i < annotations.length; i++) {
-        ctx.lineTo(annotations[i].x, annotations[i].y);
-    }
+        mask_path = generate_mask(image_name)
+        if not mask_path:
+            app.logger.error("Erreur lors de la génération du masque.")
+            return jsonify({"success": False, "message": "Erreur lors de la génération du masque."}), 500
 
-    if (isLoopClosed()) {
-        ctx.lineTo(annotations[0].x, annotations[0].y);
-        ctx.setLineDash([10 / scale, 5 / scale]);
-        ctx.lineDashOffset = dashOffset;
-        ctx.strokeStyle = "blue";
-        ctx.stroke();
+        app.logger.info(f"Annotations sauvegardées et masque généré pour l'image : {image_name}")
+        return jsonify({
+            "success": True,
+            "message": "Annotations enregistrées et masque généré.",
+            "annotations": annotations[image_name],
+            "mask_path": mask_path
+        })
+    except Exception as e:
+        app.logger.error(f"Erreur lors de la sauvegarde des annotations : {e}")
+        return jsonify({"success": False, "message": "Erreur interne"}), 500
 
-        ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
-        ctx.beginPath();
-        ctx.moveTo(annotations[0].x, annotations[0].y);
-        for (let i = 1; i < annotations.length; i++) {
-            ctx.lineTo(annotations[i].x, annotations[i].y);
-        }
-        ctx.closePath();
-        ctx.fill();
-    } else {
-        ctx.setLineDash([]);
-        ctx.strokeStyle = "red";
-        ctx.stroke();
-    }
+# Générer un masque
+def generate_mask(image_name):
+    try:
+        image_annotations = annotations.get(image_name, [])
+        if not image_annotations:
+            app.logger.warning(f"Aucune annotation trouvée pour l'image : {image_name}")
+            return None
 
-    annotations.forEach((pt, i) => {
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y, i === 0 ? 6 / scale : 4 / scale, 0, Math.PI * 2);
-        ctx.fillStyle = i === 0 ? "blue" : "red";
-        ctx.fill();
-    });
-}
+        # Vérifier si image_name est une URL
+        if image_name.startswith("http://") or image_name.startswith("https://"):
+            image_path = os.path.join(UPLOAD_FOLDER, os.path.basename(image_name))
+            if not os.path.exists(image_path):
+                downloaded = download_image(image_name, image_path)
+                if not downloaded:
+                    return None
+        else:
+            image_path = os.path.join(UPLOAD_FOLDER, image_name)
 
-function isLoopClosed() {
-    if (annotations.length < 3) return false;
-    const dx = annotations[0].x - annotations[annotations.length - 1].x;
-    const dy = annotations[0].y - annotations[annotations.length - 1].y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    return dist < 10;
-}
+        if not os.path.exists(image_path):
+            app.logger.warning(f"Image non trouvée pour générer le masque : {image_name}")
+            return None
 
-function animateDashedLine() {
-    dashOffset -= 1;
-    redrawCanvas();
-    requestAnimationFrame(animateDashedLine);
-}
-animateDashedLine();
+        image = cv2.imread(image_path)
+        if image is None:
+            app.logger.error(f"Impossible de lire l'image : {image_name}")
+            return None
 
-function canvasToImageCoords(cx, cy) {
-    return {
-        x: (cx - offsetX) / scale,
-        y: (cy - offsetY) / scale
-    };
-}
+        height, width, _ = image.shape
+        mask = np.zeros((height, width), dtype=np.uint8)
 
-// Ajouter un point
-canvas.addEventListener("click", (e) => {
-    if (mode === "add") {
-        const rect = canvas.getBoundingClientRect();
-        const cx = e.clientX - rect.left;
-        const cy = e.clientY - rect.top;
-        const imgCoords = canvasToImageCoords(cx, cy);
+        points = np.array([[int(p["x"]), int(p["y"])] for p in image_annotations])
+        cv2.fillPoly(mask, [points], 255)
 
-        if (imgCoords.x >= 0 && imgCoords.x <= image.width && imgCoords.y >= 0 && imgCoords.y <= image.height) {
-            annotations.push({ x: imgCoords.x, y: imgCoords.y });
-            redrawCanvas();
-        }
-    }
-});
+        mask_filename = f"{os.path.splitext(os.path.basename(image_name))[0]}_mask.png"
+        mask_path = os.path.join(MASK_FOLDER, mask_filename)
+        cv2.imwrite(mask_path, mask)
 
-canvas.addEventListener("mousedown", (e) => {
-    if (mode === "move") {
-        isDragging = true;
-        startX = e.clientX;
-        startY = e.clientY;
-        canvas.style.cursor = "grabbing";
-    }
-});
+        app.logger.info(f"Masque généré : {mask_filename}")
+        return f"/static/masks/{mask_filename}"
+    except Exception as e:
+        app.logger.error(f"Erreur lors de la génération du masque : {e}")
+        return None
 
-canvas.addEventListener("mousemove", (e) => {
-    if (isDragging && mode === "move") {
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        offsetX += dx;
-        offsetY += dy;
-        startX = e.clientX;
-        startY = e.clientY;
-
-        limitOffsets();
-        redrawCanvas();
-    }
-});
-
-canvas.addEventListener("mouseup", () => {
-    isDragging = false;
-    canvas.style.cursor = (mode === "move") ? "grab" : "crosshair";
-});
-
-function limitOffsets() {
-    const imgWidth = image.width * scale;
-    const imgHeight = image.height * scale;
-
-    if (imgWidth <= canvas.width) {
-        offsetX = (canvas.width - imgWidth) / 2;
-    } else {
-        if (offsetX > 0) offsetX = 0;
-        if (offsetX + imgWidth < canvas.width) offsetX = canvas.width - imgWidth;
-    }
-
-    if (imgHeight <= canvas.height) {
-        offsetY = (canvas.height - imgHeight) / 2;
-    } else {
-        if (offsetY > 0) offsetY = 0;
-        if (offsetY + imgHeight < canvas.height) offsetY = canvas.height - imgHeight;
-    }
-}
-
-function zoom(factor) {
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
-    const beforeZoom = canvasToImageCoords(centerX, centerY);
-
-    let newScale = scale * factor;
-    if (newScale < baseScale) return;
-    scale = newScale;
-
-    const afterZoomX = beforeZoom.x * scale + offsetX;
-    const afterZoomY = beforeZoom.y * scale + offsetY;
-
-    offsetX += (centerX - afterZoomX);
-    offsetY += (centerY - afterZoomY);
-
-    limitOffsets();
-    redrawCanvas();
-}
-
-// Boutons
-document.getElementById("addPointsButton").addEventListener("click", () => {
-    mode = "add";
-    canvas.style.cursor = "crosshair";
-});
-
-document.getElementById("moveButton").addEventListener("click", () => {
-    mode = "move";
-    canvas.style.cursor = "grab";
-});
-
-document.getElementById("zoomInButton").addEventListener("click", () => {
-    zoom(1.1);
-});
-
-document.getElementById("zoomOutButton").addEventListener("click", () => {
-    zoom(1/1.1);
-});
-
-document.getElementById("undoButton").addEventListener("click", () => {
-    if (annotations.length > 0) {
-        annotations.pop();
-        redrawCanvas();
-    }
-});
-
-document.getElementById("saveButton").addEventListener("click", () => {
-    const maskData = generateMask(); // Placeholder pour la génération du masque
-
-    const annotationData = {
-        annotations: annotations,
-        mask: maskData
-    };
-
-    // Envoyer les données à Bubble
-    parent.postMessage(
-        {
-            type: "save_annotation",
-            data: annotationData
-        },
-        "*"
-    );
-
-    alert("Annotation envoyée à Bubble !");
-});
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 5000))  # Utilisez le port défini par Render ou 5000 par défaut
+    app.run(host="0.0.0.0", port=port, debug=True)
