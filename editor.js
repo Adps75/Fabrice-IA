@@ -1,4 +1,3 @@
-// Variables globales
 const canvas = document.getElementById("drawingCanvas");
 const ctx = canvas.getContext("2d");
 
@@ -15,25 +14,13 @@ let startX, startY;
 
 let dashOffset = 0; // Pour l'animation des traits pointillés
 
-// Fonction pour récupérer les paramètres de l'URL
-function getQueryParam(param) {
-    const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get(param);
-}
-
-// Récupérer l'URL de l'image depuis les paramètres
-const imageName = getQueryParam("image_url");
-
-if (!imageName) {
-    alert("Aucune image spécifiée dans l'URL !");
-} else {
-    image.src = imageName; // Charger l'image directement depuis l'URL
-    image.onload = () => {
-        setupCanvas();
-        resetView();
-        redrawCanvas();
-    };
-}
+// Charger l'image depuis l'endpoint Flask
+image.src = `/get_image/${imageName}`;
+image.onload = () => {
+    setupCanvas();
+    resetView();
+    redrawCanvas();
+};
 
 // Redimensionner en fonction de la fenêtre
 window.addEventListener('resize', () => {
@@ -239,21 +226,15 @@ document.getElementById("undoButton").addEventListener("click", () => {
 });
 
 document.getElementById("saveButton").addEventListener("click", () => {
-    const maskData = generateMask(); // Placeholder pour la génération du masque
-
-    const annotationData = {
-        annotations: annotations,
-        mask: maskData
-    };
-
-    // Envoyer les données à Bubble
-    parent.postMessage(
-        {
-            type: "save_annotation",
-            data: annotationData
-        },
-        "*"
-    );
-
-    alert("Annotation envoyée à Bubble !");
+    fetch("/save_annotation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            image_name: imageName,
+            annotations: annotations
+        })
+    })
+    .then(response => response.json())
+    .then(data => alert(data.message))
+    .catch(err => console.error(err));
 });
