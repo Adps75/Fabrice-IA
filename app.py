@@ -2,20 +2,35 @@ from flask import Flask, request, jsonify, send_from_directory, render_template
 import os
 import cv2
 import numpy as np
+import requests
+from io import BytesIO
+from PIL import Image
+
+# YOLOv8
+from ultralytics import YOLO
 
 app = Flask(__name__)
 
+# Dossiers
 UPLOAD_FOLDER = "static/images"
-ICON_FOLDER = "static/icons"
 MASK_FOLDER = "static/masks"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(MASK_FOLDER, exist_ok=True)
 
-annotations = {}
+# Exemple : charger un modèle YOLOv8 pré-entraîné
+# (yolov8n.pt est un modèle léger, vous pouvez opter pour d’autres .pt)
+model = YOLO("yolov8n.pt")
+
+# Stockage temporaire (si nécessaire)
+annotations_store = {}
 
 @app.route("/")
 def home():
-    return "Bienvenue sur l'éditeur Python pour Bubble !"
+    return "Bienvenue sur l'éditeur Python pour Bubble (YOLOv8 + Annotations) !"
+
+@app.route("/editor", methods=["GET"])
+def editor():
+    return render_template("editor.html")
 
 @app.route("/get_image/<filename>", methods=["GET"])
 def get_image(filename):
@@ -24,62 +39,111 @@ def get_image(filename):
     except FileNotFoundError:
         return jsonify({"success": False, "message": "Image non trouvée"}), 404
 
-@app.route("/get_icon/<filename>", methods=["GET"])
-def get_icon(filename):
+@app.route("/get_mask/<filename>", methods=["GET"])
+def get_mask(filename):
     try:
-        return send_from_directory(ICON_FOLDER, filename)
+        return send_from_directory(MASK_FOLDER, filename)
     except FileNotFoundError:
-        return jsonify({"success": False, "message": "Icône non trouvée"}), 404
-
-@app.route("/editor/<image_name>", methods=["GET"])
-def editor(image_name):
-    return render_template("editor.html", image_name=image_name)
+        return jsonify({"success": False, "message": "Masque non trouvé"}), 404
 
 @app.route("/save_annotation", methods=["POST"])
 def save_annotation():
+    """
+    Reçoit un JSON avec :
+    - image_url : URL de l'image (stockée dans Bubble ou ailleurs)
+    - annotations : liste de points (x, y)
+    - bubble_save_url : endpoint Bubble pour renvoyer le résultat
+    Le flux :
+      1) Télécharge l'image
+      2) Analyse l'image avec YOLOv8 (détections)
+      3) Génère un masque à partir des points
+      4) Envoie (POST) le tout vers bubble_save_url
+    """
     data = request.json
-    image_name = data.get("image_name")
+    image_url = data.get("image_url")
     new_annotations = data.get("annotations", [])
+    bubble_save_url = data.get("bubble_save_url")
 
-    if not image_name or not new_annotations:
-        return jsonify({"success": False, "message": "Nom de l'image ou annotations manquants."}), 400
+    if not image_url or not bubble_save_url:
+        return jsonify({"success": False,
+                        "message": "Paramètres manquants : image_url et bubble_save_url sont requis."}), 400
 
-    if image_name not in annotations:
-        annotations[image_name] = []
-    annotations[image_name].extend(new_annotations)
+    # Sauvegarde locale des annotations
+    annotations_store[image_url] = new_annotations
 
-    mask_path = generate_mask(image_name)
-    if not mask_path:
-        return jsonify({"success": False, "message": "Erreur lors de la génération du masque."}), 500
+    # 1) Télécharger l'image
+    try:
+        r = requests.get(image_url)
+        r.raise_for_status()
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Impossible de télécharger l'image : {str(e)}"}), 400
+
+    # Conversion en PIL
+    img_data = BytesIO(r.content)
+    pil_image = Image.open(img_data).convert("RGB")
+
+    # 2) YOLOv8 : détection
+    results = model.predict(pil_image, conf=0.25)  # conf threshold ex: 0.25
+    detections = []
+    # On récupère la première image de la batch (results[0])
+    for box in results[0].boxes:
+        x1, y1, x2, y2 = box.xyxy[0]
+        cls_id = int(box.cls[0])
+        conf = float(box.conf[0])
+        class_name = model.names[cls_id]
+        detections.append({
+            "class": class_name,
+            "confidence": round(conf, 3),
+            "x1": int(x1),
+            "y1": int(y1),
+            "x2": int(x2),
+            "y2": int(y2)
+        })
+
+    # 3) Générer le masque à partir des annotations
+    np_image = np.array(pil_image)
+    height, width = np_image.shape[:2]
+    mask = np.zeros((height, width), dtype=np.uint8)
+
+    points = np.array([[int(pt["x"]), int(pt["y"])] for pt in new_annotations])
+    if len(points) >= 3:
+        cv2.fillPoly(mask, [points], 255)
+
+    # Stocker le masque localement
+    # On crée un nom de fichier à partir du nom de l'image
+    basename = os.path.basename(image_url).split("?")[0]
+    mask_filename = basename.replace(".jpg", ".png").replace(".jpeg", ".png").replace(".png", "_mask.png")
+    mask_path = os.path.join(MASK_FOLDER, mask_filename)
+    cv2.imwrite(mask_path, mask)
+
+    full_mask_url = request.host_url + "get_mask/" + mask_filename
+
+    # 4) Envoyer le résultat complet à Bubble
+    #    On suppose que Bubble attend un JSON avec : image_url, annotations, mask_url, detections
+    payload_bubble = {
+        "image_url": image_url,
+        "annotations": new_annotations,
+        "mask_url": full_mask_url,
+        "detections": detections
+    }
+
+    try:
+        bubble_response = requests.post(bubble_save_url, json=payload_bubble)
+        bubble_response.raise_for_status()
+        bubble_json = bubble_response.json()
+    except Exception as ex:
+        return jsonify({
+            "success": False,
+            "message": f"Echec envoi à Bubble : {str(ex)}"
+        }), 500
 
     return jsonify({
         "success": True,
-        "message": "Annotations enregistrées et masque généré.",
-        "annotations": annotations[image_name],
-        "mask_path": mask_path
+        "message": "Annotations & YOLOv8 envoyées à Bubble avec succès.",
+        "mask_path": full_mask_url,
+        "bubble_response": bubble_json,
+        "detections": detections
     })
-
-def generate_mask(image_name):
-    image_annotations = annotations.get(image_name, [])
-    if not image_annotations:
-        return None
-    image_path = os.path.join(UPLOAD_FOLDER, image_name)
-    if not os.path.exists(image_path):
-        return None
-    image = cv2.imread(image_path)
-    if image is None:
-        return None
-
-    height, width, _ = image.shape
-    mask = np.zeros((height, width), dtype=np.uint8)
-
-    points = np.array([[int(p["x"]), int(p["y"])] for p in image_annotations])
-    cv2.fillPoly(mask, [points], 255)
-
-    mask_filename = f"{os.path.splitext(image_name)[0]}_mask.png"
-    mask_path = os.path.join(MASK_FOLDER, mask_filename)
-    cv2.imwrite(mask_path, mask)
-    return f"/static/masks/{mask_filename}"
 
 if __name__ == "__main__":
     app.run(debug=True)
