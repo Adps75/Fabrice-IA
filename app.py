@@ -17,8 +17,9 @@ def home():
 def save_annotation():
     """
     Endpoint pour recevoir une image et ses annotations,
-    détecter les objets et créer un masque.
+    détecter les objets avec YOLOv8 et créer un masque basé sur les annotations.
     """
+    # Vérification des données entrantes
     data = request.json
     image_url = data.get("image_url")
     new_annotations = data.get("annotations", [])
@@ -36,23 +37,29 @@ def save_annotation():
     except Exception as e:
         return jsonify({"success": False, "message": f"Erreur téléchargement de l'image : {str(e)}"}), 400
 
-    # Détection avec YOLOv8
-    detections = predict_objects(pil_image, conf_threshold=0.25)
+    # Détection des objets avec YOLOv8
+    try:
+        detections = predict_objects(pil_image, conf_threshold=0.25)
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Erreur lors de la détection avec YOLOv8 : {str(e)}"}), 500
 
-    # Générer le masque à partir des annotations
-    np_image = np.array(pil_image)
-    height, width = np_image.shape[:2]
-    mask = np.zeros((height, width), dtype=np.uint8)
+    # Générer le masque basé sur les annotations
+    try:
+        np_image = np.array(pil_image)
+        height, width = np_image.shape[:2]
+        mask = np.zeros((height, width), dtype=np.uint8)
 
-    points = np.array([[int(pt["x"]), int(pt["y"])] for pt in new_annotations])
-    if len(points) >= 3:
-        cv2.fillPoly(mask, [points], 255)
+        points = np.array([[int(pt["x"]), int(pt["y"])] for pt in new_annotations])
+        if len(points) >= 3:
+            cv2.fillPoly(mask, [points], 255)
 
-    # Convertir le masque en format PNG
-    _, mask_png = cv2.imencode('.png', mask)
-    mask_bytes = BytesIO(mask_png.tobytes())
+        # Convertir le masque en format PNG
+        _, mask_png = cv2.imencode('.png', mask)
+        mask_bytes = BytesIO(mask_png.tobytes())
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Erreur lors de la création du masque : {str(e)}"}), 500
 
-    # Envoyer les résultats (image, détections, masque) à Bubble
+    # Envoyer les résultats à Bubble
     payload = {
         "image_url": image_url,
         "annotations": new_annotations,
@@ -68,5 +75,6 @@ def save_annotation():
         return jsonify({"success": False, "message": f"Erreur lors de l'envoi à Bubble : {str(e)}"}), 500
 
 if __name__ == "__main__":
+    # Récupérer le port défini par Render
     port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
