@@ -17,11 +17,10 @@ MASK_FOLDER = "static/masks"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(MASK_FOLDER, exist_ok=True)
 
-# Exemple : charger un modèle YOLOv8 pré-entraîné
-# (yolov8n.pt est un modèle léger, vous pouvez opter pour d’autres .pt)
-model = YOLO("yolov8n.pt")
+# Charger un modèle YOLOv8 pré-entraîné
+model = YOLO("yolov8n.pt")  # Remplacez par un modèle personnalisé si nécessaire
 
-# Stockage temporaire (si nécessaire)
+# Stockage temporaire pour les annotations
 annotations_store = {}
 
 @app.route("/")
@@ -50,14 +49,15 @@ def get_mask(filename):
 def save_annotation():
     """
     Reçoit un JSON avec :
-    - image_url : URL de l'image (stockée dans Bubble ou ailleurs)
+    - image_url : URL de l'image (provenant de Bubble ou autre)
     - annotations : liste de points (x, y)
-    - bubble_save_url : endpoint Bubble pour renvoyer le résultat
-    Le flux :
-      1) Télécharge l'image
-      2) Analyse l'image avec YOLOv8 (détections)
-      3) Génère un masque à partir des points
-      4) Envoie (POST) le tout vers bubble_save_url
+    - bubble_save_url : endpoint Bubble pour sauvegarder les résultats
+
+    Étapes :
+      1) Télécharger l'image depuis l'URL
+      2) Analyser l'image avec YOLOv8 (détection des objets)
+      3) Générer un masque à partir des annotations
+      4) Envoyer les résultats à Bubble
     """
     data = request.json
     image_url = data.get("image_url")
@@ -83,9 +83,8 @@ def save_annotation():
     pil_image = Image.open(img_data).convert("RGB")
 
     # 2) YOLOv8 : détection
-    results = model.predict(pil_image, conf=0.25)  # conf threshold ex: 0.25
+    results = model.predict(pil_image, conf=0.25)  # Confiance minimum pour les détections
     detections = []
-    # On récupère la première image de la batch (results[0])
     for box in results[0].boxes:
         x1, y1, x2, y2 = box.xyxy[0]
         cls_id = int(box.cls[0])
@@ -110,7 +109,6 @@ def save_annotation():
         cv2.fillPoly(mask, [points], 255)
 
     # Stocker le masque localement
-    # On crée un nom de fichier à partir du nom de l'image
     basename = os.path.basename(image_url).split("?")[0]
     mask_filename = basename.replace(".jpg", ".png").replace(".jpeg", ".png").replace(".png", "_mask.png")
     mask_path = os.path.join(MASK_FOLDER, mask_filename)
@@ -119,7 +117,6 @@ def save_annotation():
     full_mask_url = request.host_url + "get_mask/" + mask_filename
 
     # 4) Envoyer le résultat complet à Bubble
-    #    On suppose que Bubble attend un JSON avec : image_url, annotations, mask_url, detections
     payload_bubble = {
         "image_url": image_url,
         "annotations": new_annotations,
@@ -146,4 +143,5 @@ def save_annotation():
     })
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.getenv("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
