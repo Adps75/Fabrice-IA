@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from io import BytesIO
 from PIL import Image
 import requests
+import os
 import numpy as np
 import cv2
 from yolo_handler import predict_objects  # Import de la fonction YOLO
