@@ -1,19 +1,12 @@
-from flask import Flask, request, jsonify, send_from_directory, render_template
+from flask import Flask, request, jsonify
 from io import BytesIO
 from PIL import Image
 import requests
-import os
 import numpy as np
 import cv2
 from yolo_handler import predict_objects  # Import de la fonction YOLO
 
 app = Flask(__name__)
-
-# Dossiers
-UPLOAD_FOLDER = "static/images"
-MASK_FOLDER = "static/masks"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(MASK_FOLDER, exist_ok=True)
 
 @app.route("/")
 def home():
@@ -31,22 +24,21 @@ def save_annotation():
     bubble_save_url = data.get("bubble_save_url")
 
     if not image_url or not bubble_save_url:
-        return jsonify({"success": False, "message": "Paramètres manquants."}), 400
+        return jsonify({"success": False, "message": "Paramètres manquants : image_url ou bubble_save_url absent."}), 400
 
-    # Télécharger l'image
+    # Télécharger l'image depuis Bubble
     try:
         response = requests.get(image_url)
         response.raise_for_status()
+        img_data = BytesIO(response.content)
+        pil_image = Image.open(img_data).convert("RGB")
     except Exception as e:
-        return jsonify({"success": False, "message": f"Erreur téléchargement : {str(e)}"}), 400
+        return jsonify({"success": False, "message": f"Erreur téléchargement de l'image : {str(e)}"}), 400
 
-    img_data = BytesIO(response.content)
-    pil_image = Image.open(img_data).convert("RGB")
-
-    # Détection avec YOLO
+    # Détection avec YOLOv8
     detections = predict_objects(pil_image, conf_threshold=0.25)
 
-    # Générer un masque
+    # Générer le masque à partir des annotations
     np_image = np.array(pil_image)
     height, width = np_image.shape[:2]
     mask = np.zeros((height, width), dtype=np.uint8)
@@ -55,35 +47,24 @@ def save_annotation():
     if len(points) >= 3:
         cv2.fillPoly(mask, [points], 255)
 
-    # Sauvegarder le masque
-    basename = os.path.basename(image_url).split("?")[0]
-    mask_filename = basename.replace(".jpg", ".png").replace(".jpeg", ".png").replace(".png", "_mask.png")
-    mask_path = os.path.join(MASK_FOLDER, mask_filename)
-    cv2.imwrite(mask_path, mask)
+    # Convertir le masque en format PNG
+    _, mask_png = cv2.imencode('.png', mask)
+    mask_bytes = BytesIO(mask_png.tobytes())
 
-    full_mask_url = request.host_url + "get_mask/" + mask_filename
-
-    # Envoyer à Bubble
+    # Envoyer les résultats (image, détections, masque) à Bubble
     payload = {
         "image_url": image_url,
         "annotations": new_annotations,
-        "mask_url": full_mask_url,
         "detections": detections
     }
+    files = {'mask': ('mask.png', mask_bytes, 'image/png')}
 
     try:
-        bubble_response = requests.post(bubble_save_url, json=payload)
+        bubble_response = requests.post(bubble_save_url, json=payload, files=files)
         bubble_response.raise_for_status()
         return jsonify({"success": True, "bubble_response": bubble_response.json()})
     except Exception as e:
-        return jsonify({"success": False, "message": f"Erreur envoi Bubble : {str(e)}"}), 500
-
-@app.route("/get_mask/<filename>", methods=["GET"])
-def get_mask(filename):
-    try:
-        return send_from_directory(MASK_FOLDER, filename)
-    except FileNotFoundError:
-        return jsonify({"success": False, "message": "Masque introuvable."}), 404
+        return jsonify({"success": False, "message": f"Erreur lors de l'envoi à Bubble : {str(e)}"}), 500
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))

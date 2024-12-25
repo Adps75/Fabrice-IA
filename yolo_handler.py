@@ -1,14 +1,10 @@
 import os
-import cv2
-import numpy as np
-from PIL import Image
 from ultralytics import YOLO
 
 # Charger le modèle YOLOv8
-# Assurez-vous que le fichier `yolov8n.pt` est dans le bon dossier
 model_path = "yolov8n.pt"
 if not os.path.exists(model_path):
-    raise FileNotFoundError(f"Le fichier {model_path} est introuvable. Téléchargez-le et placez-le dans le répertoire actuel.")
+    raise FileNotFoundError(f"Le fichier {model_path} est introuvable. Placez-le dans le répertoire actuel.")
 
 model = YOLO(model_path)
 
@@ -19,7 +15,6 @@ def predict_objects(image, conf_threshold=0.25):
     :param conf_threshold: float, le seuil de confiance pour les détections.
     :return: list, les détections sous forme de dictionnaire.
     """
-    # Effectuer les prédictions
     results = model.predict(image, conf=conf_threshold)
     detections = []
 
