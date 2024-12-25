@@ -10,48 +10,9 @@
     <!-- Fichier CSS -->
     <link rel="stylesheet" href="editor.css">
 </head>
-<body><!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Éditeur Visuel</title>
-        <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
-        <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-        <link rel="stylesheet" href="/static/css/editor.css">
-    </head>
-    <body>
-        <div class="editor-container">
-            <div class="image-viewer">
-                <canvas id="drawingCanvas"></canvas>
-            </div>
-    
-            <div class="toolbar">
-                <button id="addPointsButton" class="tool-button" data-tooltip="Ajouter des points">
-                    <span class="material-icons">add_circle</span>
-                </button>
-                <button id="moveButton" class="tool-button" data-tooltip="Déplacer">
-                    <span class="material-icons">pan_tool</span>
-                </button>
-                <button id="zoomInButton" class="tool-button" data-tooltip="Zoomer">
-                    <span class="material-icons">zoom_in</span>
-                </button>
-                <button id="zoomOutButton" class="tool-button" data-tooltip="Dézoomer">
-                    <span class="material-icons">zoom_out</span>
-                </button>
-                <button id="undoButton" class="tool-button" data-tooltip="Annuler dernier point">
-                    <span class="material-icons">undo</span>
-                </button>
-                <button id="saveButton" class="tool-button" data-tooltip="Sauvegarder">
-                    <span class="material-icons">save</span>
-                </button>
-            </div>
-        </div>
-    
-        <script src="/static/js/editor.js"></script>
-    </body>
-    </html>
-    
+<body>
+
+    <!-- Barre supérieure -->
     <header class="top-bar">
         <div class="app-title">Fabrice.IA</div>
         <div class="tool-buttons-container">
@@ -76,6 +37,7 @@
         </div>
     </header>
 
+    <!-- Zone d'édition (le canvas) -->
     <div class="editor-area">
         <div class="canvas-container">
             <canvas id="drawingCanvas"></canvas>
