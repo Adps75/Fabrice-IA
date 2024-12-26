@@ -43,7 +43,7 @@ def detect_objects():
 
     payload = {
         "image_url": image_url,
-        "detections": detections
+        "detections": json.dumps(detections)
     }
     headers = {
         "Authorization": "Bearer YOUR_API_KEY",  # Remplacez par la clé API Bubble
