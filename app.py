@@ -48,7 +48,7 @@ def detect_objects():
         "detections": json.dumps(detections)  # Convertir les détections en chaîne JSON
     }
     headers = {
-        "Authorization": "Bearer YOUR_API_KEY",  # Remplacez par la clé API Bubble
+        "Authorization": "Bearer bd9d52db77e424541731237a6c6763db",  # Remplacez par la clé API Bubble
         "Content-Type": "application/json"
     }
 
@@ -105,7 +105,7 @@ def save_annotation():
         "annotations": new_annotations
     }
     headers = {
-        "Authorization": "Bearer bd9d52db77e424541731237a6c6763db",  # Remplacez par la clé API Bubble
+        "Authorization": "Bearer YOUR_API_KEY",  # Remplacez par la clé API Bubble
         "Content-Type": "application/json"
     }
     files = {'mask': ('mask.png', mask_bytes, 'image/png')}
