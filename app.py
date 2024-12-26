@@ -66,9 +66,13 @@ def save_annotation():
         "detections": detections
     }
     files = {'mask': ('mask.png', mask_bytes, 'image/png')}
+    headers = {
+        "Authorization": "Bearer bd9d52db77e424541731237a6c6763db",  # Remplacez YOUR_API_KEY par la clé API de Bubble
+        "Content-Type": "application/json"
+    }
 
     try:
-        bubble_response = requests.post(bubble_save_url, json=payload, files=files)
+        bubble_response = requests.post(bubble_save_url, json=payload, files=files, headers=headers)
         bubble_response.raise_for_status()
         return jsonify({"success": True, "bubble_response": bubble_response.json()})
     except Exception as e:
