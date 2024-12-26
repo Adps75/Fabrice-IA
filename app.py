@@ -13,13 +13,57 @@ app = Flask(__name__)
 def home():
     return "Bienvenue sur l'éditeur Python pour Bubble (YOLOv8 + Annotations) !"
 
+# Endpoint pour détecter des objets
+@app.route("/detect_objects", methods=["POST"])
+def detect_objects():
+    """
+    Analyse une image pour détecter des objets avec YOLOv8.
+    """
+    data = request.json
+    image_url = data.get("image_url")
+    bubble_save_url = data.get("bubble_save_url")
+
+    if not image_url or not bubble_save_url:
+        return jsonify({"success": False, "message": "Paramètres manquants : image_url ou bubble_save_url absent."}), 400
+
+    try:
+        # Télécharger l'image
+        response = requests.get(image_url)
+        response.raise_for_status()
+        img_data = BytesIO(response.content)
+        pil_image = Image.open(img_data).convert("RGB")
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Erreur téléchargement de l'image : {str(e)}"}), 400
+
+    try:
+        # Détecter les objets
+        detections = predict_objects(pil_image, conf_threshold=0.25)
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Erreur lors de la détection avec YOLOv8 : {str(e)}"}), 500
+
+    payload = {
+        "image_url": image_url,
+        "detections": detections
+    }
+    headers = {
+        "Authorization": "Bearer YOUR_API_KEY",  # Remplacez par la clé API Bubble
+        "Content-Type": "application/json"
+    }
+
+    try:
+        # Envoyer les résultats à Bubble
+        bubble_response = requests.post(bubble_save_url, json=payload, headers=headers)
+        bubble_response.raise_for_status()
+        return jsonify({"success": True, "bubble_response": bubble_response.json()})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Erreur lors de l'envoi à Bubble : {str(e)}"}), 500
+
+# Endpoint pour sauvegarder les annotations et générer un masque
 @app.route("/save_annotation", methods=["POST"])
 def save_annotation():
     """
-    Endpoint pour recevoir une image et ses annotations,
-    détecter les objets avec YOLOv8 et créer un masque basé sur les annotations.
+    Reçoit une image et ses annotations, génère un masque, et envoie les données à Bubble.
     """
-    # Vérification des données entrantes
     data = request.json
     image_url = data.get("image_url")
     new_annotations = data.get("annotations", [])
@@ -28,8 +72,8 @@ def save_annotation():
     if not image_url or not bubble_save_url:
         return jsonify({"success": False, "message": "Paramètres manquants : image_url ou bubble_save_url absent."}), 400
 
-    # Télécharger l'image depuis Bubble
     try:
+        # Télécharger l'image
         response = requests.get(image_url)
         response.raise_for_status()
         img_data = BytesIO(response.content)
@@ -37,14 +81,8 @@ def save_annotation():
     except Exception as e:
         return jsonify({"success": False, "message": f"Erreur téléchargement de l'image : {str(e)}"}), 400
 
-    # Détection des objets avec YOLOv8
     try:
-        detections = predict_objects(pil_image, conf_threshold=0.25)
-    except Exception as e:
-        return jsonify({"success": False, "message": f"Erreur lors de la détection avec YOLOv8 : {str(e)}"}), 500
-
-    # Générer le masque basé sur les annotations
-    try:
+        # Générer le masque
         np_image = np.array(pil_image)
         height, width = np_image.shape[:2]
         mask = np.zeros((height, width), dtype=np.uint8)
@@ -53,25 +91,24 @@ def save_annotation():
         if len(points) >= 3:
             cv2.fillPoly(mask, [points], 255)
 
-        # Convertir le masque en format PNG
+        # Convertir le masque en PNG
         _, mask_png = cv2.imencode('.png', mask)
         mask_bytes = BytesIO(mask_png.tobytes())
     except Exception as e:
         return jsonify({"success": False, "message": f"Erreur lors de la création du masque : {str(e)}"}), 500
 
-    # Envoyer les résultats à Bubble
     payload = {
         "image_url": image_url,
-        "annotations": new_annotations,
-        "detections": detections
+        "annotations": new_annotations
     }
-    files = {'mask': ('mask.png', mask_bytes, 'image/png')}
     headers = {
-        "Authorization": "Bearer bd9d52db77e424541731237a6c6763db",  # Remplacez YOUR_API_KEY par la clé API de Bubble
+        "Authorization": "Bearer YOUR_API_KEY",  # Remplacez par la clé API Bubble
         "Content-Type": "application/json"
     }
+    files = {'mask': ('mask.png', mask_bytes, 'image/png')}
 
     try:
+        # Envoyer les résultats à Bubble
         bubble_response = requests.post(bubble_save_url, json=payload, files=files, headers=headers)
         bubble_response.raise_for_status()
         return jsonify({"success": True, "bubble_response": bubble_response.json()})
@@ -79,6 +116,6 @@ def save_annotation():
         return jsonify({"success": False, "message": f"Erreur lors de l'envoi à Bubble : {str(e)}"}), 500
 
 if __name__ == "__main__":
-    # Récupérer le port défini par Render
+    # Port utilisé par Render
     port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
