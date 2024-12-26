@@ -5,6 +5,7 @@ import requests
 import os
 import numpy as np
 import cv2
+import json  # Import nécessaire
 from yolo_handler import predict_objects  # Import de la fonction YOLO
 
 app = Flask(__name__)
@@ -41,9 +42,10 @@ def detect_objects():
     except Exception as e:
         return jsonify({"success": False, "message": f"Erreur lors de la détection avec YOLOv8 : {str(e)}"}), 500
 
+    # Préparer les données pour Bubble
     payload = {
         "image_url": image_url,
-        "detections": json.dumps(detections)
+        "detections": json.dumps(detections)  # Convertir les détections en chaîne JSON
     }
     headers = {
         "Authorization": "Bearer YOUR_API_KEY",  # Remplacez par la clé API Bubble
@@ -97,19 +99,20 @@ def save_annotation():
     except Exception as e:
         return jsonify({"success": False, "message": f"Erreur lors de la création du masque : {str(e)}"}), 500
 
+    # Préparer les données pour Bubble
     payload = {
         "image_url": image_url,
         "annotations": new_annotations
     }
     headers = {
-        "Authorization": "Bearer YOUR_API_KEY",  # Remplacez par la clé API Bubble
+        "Authorization": "Bearer bd9d52db77e424541731237a6c6763db",  # Remplacez par la clé API Bubble
         "Content-Type": "application/json"
     }
     files = {'mask': ('mask.png', mask_bytes, 'image/png')}
 
     try:
         # Envoyer les résultats à Bubble
-        bubble_response = requests.post(bubble_save_url, json=payload, files=files, headers=headers)
+        bubble_response = requests.post(bubble_save_url, data=payload, files=files, headers=headers)
         bubble_response.raise_for_status()
         return jsonify({"success": True, "bubble_response": bubble_response.json()})
     except Exception as e:
