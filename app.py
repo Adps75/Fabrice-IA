@@ -45,7 +45,7 @@ def detect_objects():
     # Préparer les données pour Bubble
     payload = {
         "image_url": image_url,
-        "detections": detections
+        "detections": json.dumps(detections)
     }
     headers = {
         "Authorization": "Bearer bd9d52db77e424541731237a6c6763db",  # Remplacez par la clé API Bubble
