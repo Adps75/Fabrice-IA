@@ -18,7 +18,8 @@ def home():
 @app.route("/detect_objects", methods=["POST"])
 def detect_objects():
     """
-    Analyse une image pour détecter des objets avec YOLOv8.
+    Analyse une image pour détecter des objets avec YOLOv8
+    et envoie chaque détection séparément à Bubble.
     """
     data = request.json
     image_url = data.get("image_url")
@@ -37,28 +38,36 @@ def detect_objects():
         return jsonify({"success": False, "message": f"Erreur téléchargement de l'image : {str(e)}"}), 400
 
     try:
-        # Détecter les objets
+        # Détecter les objets avec YOLOv8
         detections = predict_objects(pil_image, conf_threshold=0.25)
     except Exception as e:
         return jsonify({"success": False, "message": f"Erreur lors de la détection avec YOLOv8 : {str(e)}"}), 500
 
-    # Préparer les données pour Bubble
-    payload = {
-        "image_url": image_url,
-        "detections": json.dumps(detections)
-    }
+    # Envoyer chaque détection individuellement à Bubble
     headers = {
         "Authorization": "Bearer bd9d52db77e424541731237a6c6763db",  # Remplacez par la clé API Bubble
         "Content-Type": "application/json"
     }
 
-    try:
-        # Envoyer les résultats à Bubble
-        bubble_response = requests.post(bubble_save_url, json=payload, headers=headers)
-        bubble_response.raise_for_status()
-        return jsonify({"success": True, "bubble_response": bubble_response.json()})
-    except Exception as e:
-        return jsonify({"success": False, "message": f"Erreur lors de l'envoi à Bubble : {str(e)}"}), 500
+    for detection in detections:
+        payload = {
+            "url_image": image_url,
+            "class": detection["class"],
+            "confidence": detection["confidence"],
+            "x1": detection["x1"],
+            "y1": detection["y1"],
+            "x2": detection["x2"],
+            "y2": detection["y2"]
+        }
+
+        try:
+            bubble_response = requests.post(bubble_save_url, json=payload, headers=headers)
+            bubble_response.raise_for_status()
+        except Exception as e:
+            # Continuer même si une détection échoue
+            print(f"Erreur lors de l'envoi de la détection à Bubble : {str(e)}")
+
+    return jsonify({"success": True, "message": "Toutes les détections ont été envoyées à Bubble."})
 
 # Endpoint pour sauvegarder les annotations et générer un masque
 @app.route("/save_annotation", methods=["POST"])
