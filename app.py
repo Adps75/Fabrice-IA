@@ -3,6 +3,7 @@ from io import BytesIO
 from PIL import Image
 import requests
 import json
+import os
 from yolo_handler import predict_objects  # Fonction pour YOLOv8
 
 app = Flask(__name__)
