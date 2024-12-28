@@ -50,22 +50,23 @@ def detect_objects():
     }
 
     for detection in detections:
-        payload = {
-            "url_image": image_url,
-            "class": detection["class"],
-            "confidence": detection["confidence"],
-            "x1": detection["x1"],
-            "y1": detection["y1"],
-            "x2": detection["x2"],
-            "y2": detection["y2"]
-        }
+    payload = {
+        "url_image": image_url,
+        "class": detection["class"],
+        "confidence": detection["confidence"],
+        "x1": detection["x1"],
+        "y1": detection["y1"],
+        "x2": detection["x2"],
+        "y2": detection["y2"]
+    }
 
-        try:
-            bubble_response = requests.post(bubble_save_url, json=payload, headers=headers)
-            bubble_response.raise_for_status()
-        except Exception as e:
-            # Continuer même si une détection échoue
-            print(f"Erreur lors de l'envoi de la détection à Bubble : {str(e)}")
+    print(f"Payload envoyé : {json.dumps(payload, indent=2)}")  # Ajoutez ce log
+
+    try:
+        bubble_response = requests.post(bubble_save_url, json=payload, headers=headers)
+        bubble_response.raise_for_status()
+    except Exception as e:
+        print(f"Erreur lors de l'envoi de la détection à Bubble : {str(e)}")
 
     return jsonify({"success": True, "message": "Toutes les détections ont été envoyées à Bubble."})
 
