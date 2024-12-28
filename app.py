@@ -2,11 +2,8 @@ from flask import Flask, request, jsonify
 from io import BytesIO
 from PIL import Image
 import requests
-import os
-import numpy as np
-import cv2
-import json  # Import nécessaire
-from yolo_handler import predict_objects  # Import de la fonction YOLO
+import json
+from yolo_handler import predict_objects  # Fonction pour YOLOv8
 
 app = Flask(__name__)
 
@@ -14,12 +11,11 @@ app = Flask(__name__)
 def home():
     return "Bienvenue sur l'éditeur Python pour Bubble (YOLOv8 + Annotations) !"
 
-# Endpoint pour détecter des objets
 @app.route("/detect_objects", methods=["POST"])
 def detect_objects():
     """
     Analyse une image pour détecter des objets avec YOLOv8
-    et envoie chaque détection séparément à Bubble.
+    et envoie chaque détection individuellement à Bubble.
     """
     data = request.json
     image_url = data.get("image_url")
@@ -43,34 +39,39 @@ def detect_objects():
     except Exception as e:
         return jsonify({"success": False, "message": f"Erreur lors de la détection avec YOLOv8 : {str(e)}"}), 500
 
-    # Envoyer chaque détection individuellement à Bubble
+    # Préparer l'en-tête pour les requêtes vers Bubble
     headers = {
         "Authorization": "Bearer bd9d52db77e424541731237a6c6763db",  # Remplacez par la clé API Bubble
         "Content-Type": "application/json"
     }
 
+    # Envoyer chaque détection individuellement
+    errors = []
     for detection in detections:
-    payload = {
-        "url_image": image_url,
-        "class": detection["class"],
-        "confidence": detection["confidence"],
-        "x1": detection["x1"],
-        "y1": detection["y1"],
-        "x2": detection["x2"],
-        "y2": detection["y2"]
-    }
+        payload = {
+            "url_image": image_url,
+            "class": detection["class"],
+            "confidence": detection["confidence"],
+            "x1": detection["x1"],
+            "y1": detection["y1"],
+            "x2": detection["x2"],
+            "y2": detection["y2"]
+        }
 
-    print(f"Payload envoyé : {json.dumps(payload, indent=2)}")  # Ajoutez ce log
+        # Log du payload pour débogage
+        print(f"Payload envoyé : {json.dumps(payload, indent=2)}")
 
-    try:
-        bubble_response = requests.post(bubble_save_url, json=payload, headers=headers)
-        bubble_response.raise_for_status()
-    except Exception as e:
-        print(f"Erreur lors de l'envoi de la détection à Bubble : {str(e)}")
+        try:
+            bubble_response = requests.post(bubble_save_url, json=payload, headers=headers)
+            bubble_response.raise_for_status()  # Raise exception si erreur HTTP
+        except Exception as e:
+            errors.append(f"Erreur lors de l'envoi à Bubble : {str(e)}")
 
+    # Résumé des résultats
+    if errors:
+        return jsonify({"success": False, "message": "Certaines détections ont échoué", "errors": errors}), 207
     return jsonify({"success": True, "message": "Toutes les détections ont été envoyées à Bubble."})
 
-# Endpoint pour sauvegarder les annotations et générer un masque
 @app.route("/save_annotation", methods=["POST"])
 def save_annotation():
     """
