@@ -1,7 +1,7 @@
 // Lecture des paramètres d'URL : ?imageUrl=...&bubbleUrl=...
 const params = new URLSearchParams(window.location.search);
 const imageUrl = params.get("imageUrl") || "";       // L'URL de l'image sur Bubble
-const bubbleSaveUrl = params.get("bubbleUrl") || ""; // L'endpoint Bubble pour sauver
+const bubbleSaveUrl = params.get("bubbleUrl") || ""; // L'endpoint Bubble pour sauvegarder
 
 if (!imageUrl) {
     console.warn("Aucune imageUrl n'a été fournie. L'image ne pourra pas se charger.");
@@ -114,7 +114,7 @@ function isLoopClosed() {
     if (annotations.length < 3) return false;
     const dx = annotations[0].x - annotations[annotations.length - 1].x;
     const dy = annotations[0].y - annotations[annotations.length - 1].y;
-    return Math.sqrt(dx*dx + dy*dy) < 10;
+    return Math.sqrt(dx * dx + dy * dy) < 10;
 }
 
 // Animation des pointillés
@@ -180,14 +180,13 @@ function limitOffsets() {
     const imgW = image.width * scale;
     const imgH = image.height * scale;
 
-    // Empêche l'image de sortir du cadre horizontalement
     if (imgW <= canvas.width) {
         offsetX = (canvas.width - imgW) / 2;
     } else {
         if (offsetX > 0) offsetX = 0;
         if (offsetX + imgW < canvas.width) offsetX = canvas.width - imgW;
     }
-    // Empêche l'image de sortir verticalement
+
     if (imgH <= canvas.height) {
         offsetY = (canvas.height - imgH) / 2;
     } else {
