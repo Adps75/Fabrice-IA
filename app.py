@@ -6,6 +6,7 @@ import json
 import os
 from yolo_handler import predict_objects  # Fonction pour YOLOv8
 
+
 app = Flask(__name__)
 
 # Clé API Bubble
@@ -70,24 +71,18 @@ def detect_objects():
         return jsonify({"success": False, "message": "Certaines détections ont échoué", "errors": errors}), 207
     return jsonify({"success": True, "message": "Toutes les détections ont été envoyées à Bubble."})
 
-
-# Endpoint pour sauvegarder les annotations depuis l'éditeur
 @app.route("/save_annotation", methods=["POST"])
 def save_annotation():
-    """
-    Reçoit une image et ses annotations de l'éditeur,
-    et les envoie à Bubble.
-    """
     data = request.json
-    image_url = data.get("image_url")  # URL de l'image annotée
-    annotations = data.get("annotations", [])  # Liste des annotations
-    bubble_save_url = "https://gardenmasteria.bubbleapps.io/version-test/api/1.1/wf/receive_annotations"
+    image_url = data.get("image_url")
+    annotations = data.get("annotations", [])
+    bubble_save_url = data.get("bubble_save_url")
 
-    if not image_url or not annotations:
-        return jsonify({"success": False, "message": "Paramètres manquants : image_url ou annotations absents."}), 400
+    if not image_url or not bubble_save_url:
+        return jsonify({"success": False, "message": "Paramètres manquants : image_url ou bubble_save_url absent."}), 400
 
     headers = {
-        "Authorization": f"Bearer {API_KEY}",
+        "Authorization": f"Bearer bd9d52db77e424541731237a6c6763db",
         "Content-Type": "application/json"
     }
 
@@ -99,11 +94,14 @@ def save_annotation():
         payload = {
             "url_image": image_url,
             "polygon_points": json.dumps(points),
+            "class": class_name
         }
 
-        print(f"Payload envoyé : {json.dumps(payload, indent=2)}")
+        print(f"Envoi du payload à Bubble : {json.dumps(payload, indent=2)}")
+        print(f"URL d'envoi : {bubble_save_url}")
 
         try:
+            # Assurez-vous d'utiliser POST
             bubble_response = requests.post(bubble_save_url, json=payload, headers=headers)
             bubble_response.raise_for_status()
         except Exception as e:
@@ -112,7 +110,6 @@ def save_annotation():
     if errors:
         return jsonify({"success": False, "message": "Certaines annotations ont échoué", "errors": errors}), 207
     return jsonify({"success": True, "message": "Toutes les annotations ont été envoyées à Bubble."})
-
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
