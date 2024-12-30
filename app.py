@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from io import BytesIO
 from PIL import Image
 import requests
@@ -6,8 +7,8 @@ import json
 import os
 from yolo_handler import predict_objects  # Fonction pour YOLOv8
 
-
 app = Flask(__name__)
+CORS(app)  # Active CORS pour toutes les routes
 
 # Clé API Bubble
 API_KEY = "bd9d52db77e424541731237a6c6763db"
@@ -82,7 +83,7 @@ def save_annotation():
         return jsonify({"success": False, "message": "Paramètres manquants : image_url ou bubble_save_url absent."}), 400
 
     headers = {
-        "Authorization": f"Bearer bd9d52db77e424541731237a6c6763db",
+        "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json"
     }
 
@@ -101,7 +102,6 @@ def save_annotation():
         print(f"URL d'envoi : {bubble_save_url}")
 
         try:
-            # Assurez-vous d'utiliser POST
             bubble_response = requests.post(bubble_save_url, json=payload, headers=headers)
             bubble_response.raise_for_status()
         except Exception as e:
