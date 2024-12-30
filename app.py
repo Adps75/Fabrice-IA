@@ -26,9 +26,10 @@ def detect_objects():
     data = request.json
     image_url = data.get("image_url")
     bubble_save_url = data.get("bubble_save_url")
+    user = data.get("user")  # Ajout du paramètre user
 
-    if not image_url or not bubble_save_url:
-        return jsonify({"success": False, "message": "Paramètres manquants : image_url ou bubble_save_url absent."}), 400
+    if not image_url or not bubble_save_url or not user:
+        return jsonify({"success": False, "message": "Paramètres manquants : image_url, bubble_save_url ou user absent."}), 400
 
     try:
         # Exemple de détection simulée
@@ -56,7 +57,8 @@ def detect_objects():
             "url_image": image_url,
             "class": detection["class"],
             "confidence": detection["confidence"],
-            "polygon_points": json.dumps(points)
+            "polygon_points": json.dumps(points),
+            "user": user  # Ajout du user dans le payload
         }
 
         try:
@@ -83,13 +85,13 @@ def save_annotation():
     data = request.json
     image_url = data.get("image_url")
     annotations = data.get("annotations", [])
-    # URL Bubble si elle n'est pas fournie, on met celle par défaut
+    user = data.get("user")  # Ajout du paramètre user
     bubble_save_url = data.get("bubble_save_url") or "https://gardenmasteria.bubbleapps.io/version-test/api/1.1/wf/receive_annotations"
 
-    if not image_url or not bubble_save_url:
+    if not image_url or not bubble_save_url or not user:
         return jsonify({
             "success": False,
-            "message": "Paramètres manquants : image_url ou bubble_save_url absent."
+            "message": "Paramètres manquants : image_url, bubble_save_url ou user absent."
         }), 400
 
     if not isinstance(annotations, list) or len(annotations) == 0:
@@ -103,7 +105,8 @@ def save_annotation():
 
     payload = {
         "url_image": image_url,
-        "polygon_points": json.dumps(points)
+        "polygon_points": json.dumps(points),
+        "user": user  # Ajout du user dans le payload
     }
 
     headers = {
