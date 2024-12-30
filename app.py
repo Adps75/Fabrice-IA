@@ -74,22 +74,25 @@ def detect_objects():
 @app.route("/save_annotation", methods=["POST"])
 def save_annotation():
     """
-    Reçoit les annotations et les envoie à Bubble sous forme agrégée.
+    Reçoit une annotation et l'envoie à Bubble.
     """
     data = request.json
     image_url = data.get("image_url")
     annotations = data.get("annotations", [])
-    bubble_save_url = data.get("bubble_save_url") or "https://gardenmasteria.bubbleapps.io/version-test/api/1.1/wf/receive_annotations"
+    bubble_save_url = data.get("bubble_save_url")
 
     if not image_url or not bubble_save_url:
         return jsonify({"success": False, "message": "Paramètres manquants : image_url ou bubble_save_url absent."}), 400
 
-    # Préparation de l'agrégation des points en un seul objet
-    aggregated_points = [{"x": point["x"], "y": point["y"]} for point in annotations]
+    # Vérification que les annotations sont bien au format attendu
+    if not isinstance(annotations, list) or len(annotations) == 0:
+        return jsonify({"success": False, "message": "Aucune annotation valide reçue."}), 400
 
+    # Préparation du payload pour Bubble
+    points = [{"x": pt["x"], "y": pt["y"]} for pt in annotations]  # Formater les points
     payload = {
         "url_image": image_url,
-        "polygon_points": json.dumps(aggregated_points)
+        "polygon_points": json.dumps(points),  # Convertir en chaîne JSON
     }
 
     headers = {
@@ -98,11 +101,12 @@ def save_annotation():
     }
 
     try:
-        bubble_response = requests.post(bubble_save_url, json=payload, headers=headers)
-        bubble_response.raise_for_status()
-        return jsonify({"success": True, "message": "Annotation sauvegardée avec succès."})
-    except Exception as e:
+        response = requests.post(bubble_save_url, json=payload, headers=headers)
+        response.raise_for_status()  # Vérifie les erreurs HTTP
+    except requests.exceptions.RequestException as e:
         return jsonify({"success": False, "message": f"Erreur lors de l'envoi à Bubble : {str(e)}"}), 500
+
+    return jsonify({"success": True, "message": "Annotation envoyée à Bubble avec succès."})
 
 
 if __name__ == "__main__":
