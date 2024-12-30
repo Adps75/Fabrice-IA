@@ -1,7 +1,7 @@
 // Lecture des paramètres d'URL : ?imageUrl=...&bubbleUrl=...
 const params = new URLSearchParams(window.location.search);
-const imageUrl = params.get("imageUrl") || "";       // L'URL de l'image sur Bubble
-const bubbleSaveUrl = params.get("bubbleUrl") || ""; // L'endpoint Bubble pour sauvegarder
+const imageUrl = params.get("imageUrl") || "";       // URL de l'image
+const bubbleSaveUrl = params.get("bubbleUrl") || ""; // Endpoint Bubble pour sauvegarder
 
 if (!imageUrl) {
     console.warn("Aucune imageUrl n'a été fournie. L'image ne pourra pas se charger.");
@@ -11,22 +11,22 @@ if (!imageUrl) {
 const canvas = document.getElementById("drawingCanvas");
 const ctx = canvas.getContext("2d");
 
-let annotations = []; // Liste des annotations
-let mode = "add";     // Mode d'interaction ("add" pour ajouter, "move" pour déplacer)
+let annotations = []; // Liste des points (x, y)
+let mode = "add"; // "add" pour ajouter des points, "move" pour déplacer l'image
 let baseScale = 1.0;
 let scale = 1.0;
 let offsetX = 0;
 let offsetY = 0;
 let isDragging = false;
 let startX, startY;
-let dashOffset = 0;   // Décalage pour l'animation des pointillés
+let dashOffset = 0; // Décalage pour l'animation des traits pointillés
 
-// -- Création de l'objet Image --
+// Création de l'objet Image
 let image = new Image();
 if (imageUrl) {
-    image.src = imageUrl; 
+    image.src = imageUrl;
 } else {
-    image.src = "no_image.png"; // Fallback si aucune URL n'est fournie
+    image.src = "no_image.png"; // Fallback si pas d'URL
 }
 
 // Initialisation du canvas après chargement de l'image
@@ -36,14 +36,13 @@ image.onload = () => {
     redrawCanvas();
 };
 
-// Ajustement du canvas si la fenêtre est redimensionnée
+// Redimensionnement de la fenêtre
 window.addEventListener('resize', () => {
     setupCanvas();
     resetView();
     redrawCanvas();
 });
 
-// Fonction pour configurer les dimensions du canvas
 function setupCanvas() {
     const container = document.querySelector(".canvas-container");
     canvas.width = container.clientWidth;
@@ -54,26 +53,22 @@ function setupCanvas() {
     baseScale = Math.min(scaleX, scaleY);
 }
 
-// Fonction pour réinitialiser la vue (zoom et position de l'image)
 function resetView() {
     scale = baseScale;
     offsetX = (canvas.width - image.width * scale) / 2;
     offsetY = (canvas.height - image.height * scale) / 2;
 }
 
-// Fonction pour redessiner tout le contenu du canvas
 function redrawCanvas() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
     ctx.translate(offsetX, offsetY);
     ctx.scale(scale, scale);
     ctx.drawImage(image, 0, 0, image.width, image.height);
-
     drawAnnotations();
     ctx.restore();
 }
 
-// Fonction pour dessiner les annotations sur le canvas
 function drawAnnotations() {
     if (annotations.length === 0) return;
 
@@ -84,6 +79,7 @@ function drawAnnotations() {
         ctx.lineTo(annotations[i].x, annotations[i].y);
     }
 
+    // Si c'est un polygone fermé
     if (isLoopClosed()) {
         ctx.lineTo(annotations[0].x, annotations[0].y);
         ctx.setLineDash([10 / scale, 5 / scale]);
@@ -91,7 +87,7 @@ function drawAnnotations() {
         ctx.strokeStyle = "blue";
         ctx.stroke();
 
-        // Remplir la boucle fermée
+        // Remplir le polygone
         ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
         ctx.beginPath();
         ctx.moveTo(annotations[0].x, annotations[0].y);
@@ -107,20 +103,19 @@ function drawAnnotations() {
     }
 
     // Dessiner les points
-    annotations.forEach((pt, i) => {
+    annotations.forEach((pt, index) => {
         ctx.beginPath();
-        ctx.arc(pt.x, pt.y, i === 0 ? 6 / scale : 4 / scale, 0, 2 * Math.PI);
-        ctx.fillStyle = i === 0 ? "blue" : "red";
+        ctx.arc(pt.x, pt.y, index === 0 ? 6 / scale : 4 / scale, 0, 2 * Math.PI);
+        ctx.fillStyle = index === 0 ? "blue" : "red";
         ctx.fill();
     });
 }
 
-// Vérifie si la boucle est fermée
 function isLoopClosed() {
     if (annotations.length < 3) return false;
     const dx = annotations[0].x - annotations[annotations.length - 1].x;
     const dy = annotations[0].y - annotations[annotations.length - 1].y;
-    return Math.sqrt(dx * dx + dy * dy) < 10;
+    return Math.sqrt(dx*dx + dy*dy) < 10;
 }
 
 // Animation des pointillés
@@ -131,7 +126,7 @@ function animateDashedLine() {
 }
 animateDashedLine();
 
-// Conversion des coordonnées Canvas → Image
+// Convertir coordonnées Canvas → Image
 function canvasToImageCoords(cx, cy) {
     return {
         x: (cx - offsetX) / scale,
@@ -139,7 +134,7 @@ function canvasToImageCoords(cx, cy) {
     };
 }
 
-// Événement : clic pour ajouter un point
+// Clic sur le canvas pour ajouter un point si mode=add
 canvas.addEventListener("click", (e) => {
     if (mode === "add") {
         const rect = canvas.getBoundingClientRect();
@@ -155,7 +150,7 @@ canvas.addEventListener("click", (e) => {
     }
 });
 
-// Déplacement (drag) si mode = move
+// Déplacement de l'image (mode=move)
 canvas.addEventListener("mousedown", (e) => {
     if (mode === "move") {
         isDragging = true;
@@ -182,7 +177,7 @@ canvas.addEventListener("mouseup", () => {
     canvas.style.cursor = (mode === "move") ? "grab" : "crosshair";
 });
 
-// Limite le déplacement (garde l'image visible dans le canvas)
+// Empêcher de sortir du cadre
 function limitOffsets() {
     const imgW = image.width * scale;
     const imgH = image.height * scale;
@@ -209,7 +204,7 @@ function zoom(factor) {
     const before = canvasToImageCoords(centerX, centerY);
 
     let newScale = scale * factor;
-    if (newScale < baseScale) return; // Pas en dessous de 100% (taille initiale)
+    if (newScale < baseScale) return; // Pas en dessous de l'échelle initiale
     scale = newScale;
 
     const afterX = before.x * scale + offsetX;
@@ -244,7 +239,7 @@ document.getElementById("undoButton").addEventListener("click", () => {
     }
 });
 
-// Sauvegarde
+// Sauvegarder les annotations
 document.getElementById("saveButton").addEventListener("click", () => {
     if (!bubbleSaveUrl) {
         alert("Aucun endpoint Bubble (bubbleUrl) n'est défini !");
@@ -255,6 +250,7 @@ document.getElementById("saveButton").addEventListener("click", () => {
         return;
     }
 
+    // Envoi des données au backend Flask
     fetch("https://fabrice-ia.onrender.com/save_annotation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -268,11 +264,13 @@ document.getElementById("saveButton").addEventListener("click", () => {
     .then(data => {
         if (data.success) {
             alert("Annotation sauvegardée avec succès !");
-            annotations = []; // Reset des annotations
-            redrawCanvas(); // Efface le canvas
+            // Réinitialiser les annotations après sauvegarde
+            annotations = [];
+            redrawCanvas();
         } else {
             alert("Erreur de sauvegarde : " + data.message);
         }
+        console.log("Réponse /save_annotation", data);
     })
     .catch(err => {
         console.error(err);
