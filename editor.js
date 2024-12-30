@@ -11,25 +11,25 @@ if (!imageUrl) {
 const canvas = document.getElementById("drawingCanvas");
 const ctx = canvas.getContext("2d");
 
-let annotations = [];
-let mode = "add"; // "add" ou "move"
+let annotations = []; // Liste des annotations
+let mode = "add";     // Mode d'interaction ("add" pour ajouter, "move" pour déplacer)
 let baseScale = 1.0;
 let scale = 1.0;
 let offsetX = 0;
 let offsetY = 0;
 let isDragging = false;
 let startX, startY;
-let dashOffset = 0;
+let dashOffset = 0;   // Décalage pour l'animation des pointillés
 
 // -- Création de l'objet Image --
 let image = new Image();
 if (imageUrl) {
     image.src = imageUrl; 
 } else {
-    image.src = "no_image.png"; // ou un fallback
+    image.src = "no_image.png"; // Fallback si aucune URL n'est fournie
 }
 
-// Au chargement de l'image, on initialise le canvas
+// Initialisation du canvas après chargement de l'image
 image.onload = () => {
     setupCanvas();
     resetView();
@@ -43,6 +43,7 @@ window.addEventListener('resize', () => {
     redrawCanvas();
 });
 
+// Fonction pour configurer les dimensions du canvas
 function setupCanvas() {
     const container = document.querySelector(".canvas-container");
     canvas.width = container.clientWidth;
@@ -53,12 +54,14 @@ function setupCanvas() {
     baseScale = Math.min(scaleX, scaleY);
 }
 
+// Fonction pour réinitialiser la vue (zoom et position de l'image)
 function resetView() {
     scale = baseScale;
     offsetX = (canvas.width - image.width * scale) / 2;
     offsetY = (canvas.height - image.height * scale) / 2;
 }
 
+// Fonction pour redessiner tout le contenu du canvas
 function redrawCanvas() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
@@ -70,6 +73,7 @@ function redrawCanvas() {
     ctx.restore();
 }
 
+// Fonction pour dessiner les annotations sur le canvas
 function drawAnnotations() {
     if (annotations.length === 0) return;
 
@@ -87,6 +91,7 @@ function drawAnnotations() {
         ctx.strokeStyle = "blue";
         ctx.stroke();
 
+        // Remplir la boucle fermée
         ctx.fillStyle = "rgba(255, 255, 255, 0.5)";
         ctx.beginPath();
         ctx.moveTo(annotations[0].x, annotations[0].y);
@@ -101,7 +106,7 @@ function drawAnnotations() {
         ctx.stroke();
     }
 
-    // Dessin des points
+    // Dessiner les points
     annotations.forEach((pt, i) => {
         ctx.beginPath();
         ctx.arc(pt.x, pt.y, i === 0 ? 6 / scale : 4 / scale, 0, 2 * Math.PI);
@@ -110,6 +115,7 @@ function drawAnnotations() {
     });
 }
 
+// Vérifie si la boucle est fermée
 function isLoopClosed() {
     if (annotations.length < 3) return false;
     const dx = annotations[0].x - annotations[annotations.length - 1].x;
@@ -125,7 +131,7 @@ function animateDashedLine() {
 }
 animateDashedLine();
 
-// Convertir coordonnées Canvas → Image
+// Conversion des coordonnées Canvas → Image
 function canvasToImageCoords(cx, cy) {
     return {
         x: (cx - offsetX) / scale,
@@ -133,7 +139,7 @@ function canvasToImageCoords(cx, cy) {
     };
 }
 
-// Clic pour ajouter un point (si mode = add)
+// Événement : clic pour ajouter un point
 canvas.addEventListener("click", (e) => {
     if (mode === "add") {
         const rect = canvas.getBoundingClientRect();
@@ -176,6 +182,7 @@ canvas.addEventListener("mouseup", () => {
     canvas.style.cursor = (mode === "move") ? "grab" : "crosshair";
 });
 
+// Limite le déplacement (garde l'image visible dans le canvas)
 function limitOffsets() {
     const imgW = image.width * scale;
     const imgH = image.height * scale;
@@ -215,7 +222,7 @@ function zoom(factor) {
     redrawCanvas();
 }
 
-// Boutons
+// Gestion des boutons
 document.getElementById("addPointsButton").addEventListener("click", () => {
     mode = "add";
     canvas.style.cursor = "crosshair";
@@ -260,11 +267,12 @@ document.getElementById("saveButton").addEventListener("click", () => {
     .then(res => res.json())
     .then(data => {
         if (data.success) {
-            alert("Sauvegarde OK : " + data.message);
+            alert("Annotation sauvegardée avec succès !");
+            annotations = []; // Reset des annotations
+            redrawCanvas(); // Efface le canvas
         } else {
-            alert("Erreur sauvegarde : " + data.message);
+            alert("Erreur de sauvegarde : " + data.message);
         }
-        console.log("Réponse /save_annotation", data);
     })
     .catch(err => {
         console.error(err);
