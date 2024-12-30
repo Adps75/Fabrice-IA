@@ -239,7 +239,6 @@ document.getElementById("undoButton").addEventListener("click", () => {
     }
 });
 
-// Sauvegarder les annotations
 document.getElementById("saveButton").addEventListener("click", () => {
     if (!bubbleSaveUrl) {
         alert("Aucun endpoint Bubble (bubbleUrl) n'est défini !");
