@@ -248,7 +248,7 @@ document.getElementById("saveButton").addEventListener("click", () => {
         return;
     }
 
-    fetch("/save_annotation", {
+    fetch("https://fabrice-ia.onrender.com/save_annotation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
