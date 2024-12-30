@@ -1,10 +1,15 @@
-// Lecture des paramètres d'URL : ?imageUrl=...&bubbleUrl=...
+// Lecture des paramètres d'URL : ?imageUrl=...&bubbleUrl=...&userId=...
 const params = new URLSearchParams(window.location.search);
 const imageUrl = params.get("imageUrl") || "";       // URL de l'image
 const bubbleSaveUrl = params.get("bubbleUrl") || ""; // Endpoint Bubble pour sauvegarder
+const userId = params.get("userId") || "";           // ID de l'utilisateur
 
 if (!imageUrl) {
     console.warn("Aucune imageUrl n'a été fournie. L'image ne pourra pas se charger.");
+}
+
+if (!userId) {
+    console.warn("Aucun userId fourni. Certaines fonctionnalités peuvent être limitées.");
 }
 
 // -- Variables globales --
@@ -256,7 +261,8 @@ document.getElementById("saveButton").addEventListener("click", () => {
         body: JSON.stringify({
             image_url: imageUrl,
             annotations: annotations,
-            bubble_save_url: bubbleSaveUrl
+            bubble_save_url: bubbleSaveUrl,
+            user: userId // Ajout du userId dans la requête
         })
     })
     .then(res => res.json())
