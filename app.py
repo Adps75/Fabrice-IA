@@ -76,7 +76,7 @@ def save_annotation():
     data = request.json
     image_url = data.get("image_url")
     annotations = data.get("annotations", [])
-    bubble_save_url = data.get("bubble_save_url")
+    bubble_save_url = data.get("bubble_save_url") or "https://gardenmasteria.bubbleapps.io/version-test/api/1.1/wf/receive_annotations"
 
     if not image_url or not bubble_save_url:
         return jsonify({"success": False, "message": "Paramètres manquants : image_url ou bubble_save_url absent."}), 400
