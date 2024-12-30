@@ -32,7 +32,7 @@ def detect_objects():
         return jsonify({"success": False, "message": "Paramètres manquants : image_url ou bubble_save_url absent."}), 400
 
     try:
-        # Simuler des détections pour cet exemple (remplacez avec YOLOv8)
+        # Exemple de détections (simulé)
         detections = [
             {"class": "chair", "confidence": 0.85, "x1": 100, "y1": 200, "x2": 200, "y2": 300},
             {"class": "table", "confidence": 0.95, "x1": 300, "y1": 400, "x2": 400, "y2": 500}
@@ -60,8 +60,6 @@ def detect_objects():
             "polygon_points": json.dumps(points)
         }
 
-        print(f"Payload envoyé : {json.dumps(payload, indent=2)}")
-
         try:
             bubble_response = requests.post(bubble_save_url, json=payload, headers=headers)
             bubble_response.raise_for_status()
@@ -72,8 +70,12 @@ def detect_objects():
         return jsonify({"success": False, "message": "Certaines détections ont échoué", "errors": errors}), 207
     return jsonify({"success": True, "message": "Toutes les détections ont été envoyées à Bubble."})
 
+# Endpoint pour sauvegarder les annotations
 @app.route("/save_annotation", methods=["POST"])
 def save_annotation():
+    """
+    Reçoit les annotations et les envoie à Bubble sous forme agrégée.
+    """
     data = request.json
     image_url = data.get("image_url")
     annotations = data.get("annotations", [])
@@ -82,34 +84,26 @@ def save_annotation():
     if not image_url or not bubble_save_url:
         return jsonify({"success": False, "message": "Paramètres manquants : image_url ou bubble_save_url absent."}), 400
 
+    # Préparation de l'agrégation des points en un seul objet
+    aggregated_points = [{"x": point["x"], "y": point["y"]} for point in annotations]
+
+    payload = {
+        "url_image": image_url,
+        "polygon_points": json.dumps(aggregated_points)
+    }
+
     headers = {
         "Authorization": f"Bearer {API_KEY}",
         "Content-Type": "application/json"
     }
 
-    errors = []
-    for annotation in annotations:
-        points = annotation.get("points", [])
-        class_name = annotation.get("class", "")
+    try:
+        bubble_response = requests.post(bubble_save_url, json=payload, headers=headers)
+        bubble_response.raise_for_status()
+        return jsonify({"success": True, "message": "Annotation sauvegardée avec succès."})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Erreur lors de l'envoi à Bubble : {str(e)}"}), 500
 
-        payload = {
-            "url_image": image_url,
-            "polygon_points": json.dumps(points),
-            "class": class_name
-        }
-
-        print(f"Envoi du payload à Bubble : {json.dumps(payload, indent=2)}")
-        print(f"URL d'envoi : {bubble_save_url}")
-
-        try:
-            bubble_response = requests.post(bubble_save_url, json=payload, headers=headers)
-            bubble_response.raise_for_status()
-        except Exception as e:
-            errors.append(f"Erreur lors de l'envoi à Bubble : {str(e)}")
-
-    if errors:
-        return jsonify({"success": False, "message": "Certaines annotations ont échoué", "errors": errors}), 207
-    return jsonify({"success": True, "message": "Toutes les annotations ont été envoyées à Bubble."})
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
