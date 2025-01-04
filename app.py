@@ -16,27 +16,67 @@ API_KEY = "bd9d52db77e424541731237a6c6763db"
 def home():
     return "Bienvenue sur l'éditeur Python pour Bubble (YOLOv8 + Annotations) !"
 
-# Fonction pour annoter l'image
-def annotate_image(image_url, annotations):
+# Fonction pour calculer les limites du polygone
+def calculate_polygon_bounds(points):
+    xs = [point['x'] for point in points]
+    ys = [point['y'] for point in points]
+    return {
+        "minX": min(xs),
+        "maxX": max(xs),
+        "minY": min(ys),
+        "maxY": max(ys),
+    }
+
+# Fonction pour calculer le zoom pour inclure le polygone
+def calculate_zoom_scale(image_width, image_height, bounds, canvas_size):
+    polygon_width = bounds["maxX"] - bounds["minX"]
+    polygon_height = bounds["maxY"] - bounds["minY"]
+    scale_x = canvas_size[0] / polygon_width
+    scale_y = canvas_size[1] / polygon_height
+    return min(scale_x, scale_y) * 0.9  # Ajouter un padding de 10%
+
+# Fonction pour annoter l'image avec zoom et centrage
+def annotate_image_with_zoom(image_url, annotations, canvas_size=(800, 600)):
     try:
         response = requests.get(image_url)
         response.raise_for_status()
         img = Image.open(BytesIO(response.content)).convert("RGB")
-        draw = ImageDraw.Draw(img)
 
-        # Dessiner les polygones
-        for annotation in annotations:
-            polygon_points = [(pt['x'], pt['y']) for pt in annotation]
-            draw.polygon(polygon_points, outline="red", width=5)
+        # Calculer les limites du polygone
+        bounds = calculate_polygon_bounds(annotations)
 
-        # Sauvegarder l'image en mémoire
-        output = BytesIO()
-        img.save(output, format="PNG")
-        output.seek(0)
-        return output
+        # Calculer le zoom nécessaire
+        zoom_scale = calculate_zoom_scale(img.width, img.height, bounds, canvas_size)
+
+        # Centrer le polygone
+        center_x = (bounds["minX"] + bounds["maxX"]) / 2
+        center_y = (bounds["minY"] + bounds["maxY"]) / 2
+        offset_x = (canvas_size[0] / 2) - center_x * zoom_scale
+        offset_y = (canvas_size[1] / 2) - center_y * zoom_scale
+
+        # Redimensionner l'image en appliquant le zoom
+        resized_img = img.resize(
+            (int(img.width * zoom_scale), int(img.height * zoom_scale)), Image.ANTIALIAS
+        )
+
+        # Créer un nouveau canvas avec le canvas_size
+        canvas = Image.new("RGB", canvas_size, (255, 255, 255))
+        canvas.paste(
+            resized_img, (int(offset_x), int(offset_y))
+        )  # Ajuster selon les offsets
+
+        # Dessiner le polygone
+        draw = ImageDraw.Draw(canvas)
+        scaled_points = [
+            ((point["x"] * zoom_scale) + offset_x, (point["y"] * zoom_scale) + offset_y)
+            for point in annotations
+        ]
+
+        draw.polygon(scaled_points, outline="red", fill=None, width=3)
+        return canvas
 
     except Exception as e:
-        raise ValueError(f"Erreur lors de l'annotation de l'image : {str(e)}")
+        raise ValueError(f"Erreur lors de l'annotation de l'image avec zoom : {str(e)}")
 
 # Endpoint pour détecter des objets
 @app.route("/detect_objects", methods=["POST"])
@@ -94,7 +134,7 @@ def detect_objects():
 def upload_to_bubble_storage(image_buffer, filename="annotated_image.png"):
     """Télécharge l'image vers le stockage Bubble et retourne l'URL publique."""
     try:
-        bubble_upload_url = "https://gardenmasteria.bubbleapps.io/version-test/fileupload"  # Vérifiez l'URL exacte
+        bubble_upload_url = "https://gardenmasteria.bubbleapps.io/version-test/fileupload"  # URL exacte pour le stockage
         files = {
             "file": (filename, image_buffer, "image/png")
         }
@@ -103,11 +143,15 @@ def upload_to_bubble_storage(image_buffer, filename="annotated_image.png"):
         response = requests.post(bubble_upload_url, files=files, headers=headers)
         response.raise_for_status()
 
-        # Vérifiez si la réponse est une chaîne
+        # Vérifiez si la réponse est une chaîne contenant une URL relative
+        if response.text.startswith("//"):
+            return f"https:{response.text.strip()}"
+
+        # Vérifiez si la réponse est une URL complète
         if response.text.startswith("http"):
             return response.text.strip()
 
-        # Si ce n'est pas une chaîne contenant l'URL, essayez de la traiter comme JSON
+        # Si la réponse est en JSON, essayez de récupérer l'URL
         try:
             response_data = response.json()
             if isinstance(response_data, dict) and "body" in response_data and "url" in response_data["body"]:
@@ -147,21 +191,13 @@ def save_annotation():
         }), 400
 
     try:
-        # Générer l'image annotée
-        response = requests.get(image_url)
-        response.raise_for_status()
-        image = Image.open(BytesIO(response.content))
-        draw = ImageDraw.Draw(image)
-        for i, point in enumerate(annotations):
-            if i < len(annotations) - 1:
-                next_point = annotations[i + 1]
-            else:
-                next_point = annotations[0]
-            draw.line([(point["x"], point["y"]), (next_point["x"], next_point["y"])], fill="red", width=3)
+        # Générer l'image annotée avec zoom et centrage
+        canvas_size = (800, 600)  # Dimensions fixes ou dynamiques selon votre besoin
+        annotated_image = annotate_image_with_zoom(image_url, annotations, canvas_size)
 
-        # Sauvegarder dans un buffer
+        # Sauvegarder l'image annotée dans un buffer
         buffer = BytesIO()
-        image.save(buffer, format="PNG")
+        annotated_image.save(buffer, format="PNG")
         buffer.seek(0)
 
         # Télécharger sur Bubble Storage
