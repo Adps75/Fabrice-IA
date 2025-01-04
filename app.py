@@ -103,18 +103,20 @@ def upload_to_bubble_storage(image_buffer, filename="annotated_image.png"):
         response = requests.post(bubble_upload_url, files=files, headers=headers)
         response.raise_for_status()
 
-        # Vérifiez si la réponse est bien formatée en JSON
+        # Vérifiez si la réponse est une chaîne
+        if response.text.startswith("http"):
+            return response.text.strip()
+
+        # Si ce n'est pas une chaîne contenant l'URL, essayez de la traiter comme JSON
         try:
             response_data = response.json()
+            if isinstance(response_data, dict) and "body" in response_data and "url" in response_data["body"]:
+                return response_data["body"]["url"]
         except json.JSONDecodeError:
-            raise ValueError(f"Réponse inattendue de Bubble : {response.text}")
+            pass
 
-        # Assurez-vous que la clé "body" existe et contient "url"
-        if not isinstance(response_data, dict) or "body" not in response_data or "url" not in response_data["body"]:
-            raise ValueError(f"Réponse inattendue de Bubble : {response_data}")
-
-        # Retournez l'URL
-        return response_data["body"]["url"]
+        # Si aucune des méthodes ne fonctionne, lever une erreur
+        raise ValueError(f"Réponse inattendue de Bubble : {response.text}")
 
     except Exception as e:
         raise ValueError(f"Erreur lors de l'upload de l'image sur Bubble : {str(e)}")
