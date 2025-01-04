@@ -93,7 +93,7 @@ def detect_objects():
 def upload_to_bubble_storage(image_buffer, filename="annotated_image.png"):
     """Télécharge l'image vers le stockage Bubble et retourne l'URL publique."""
     try:
-        bubble_upload_url = "https://gardenmasteria.bubbleapps.io/version-test/api/1.1/wf/fileupload"  # Vérifiez l'URL exacte pour le stockage Bubble
+        bubble_upload_url = "https://gardenmasteria.bubbleapps.io/version-test/fileupload"  # Vérifiez l'URL exacte pour le stockage Bubble
         files = {
             "file": (filename, image_buffer, "image/png")
         }
