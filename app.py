@@ -90,18 +90,37 @@ def detect_objects():
 
     return jsonify({"success": True, "message": "Toutes les détections ont été envoyées à Bubble."})
 
-# Endpoint pour sauvegarder les annotations
+def upload_to_bubble_storage(image_buffer, filename="annotated_image.png"):
+    """Télécharge l'image vers le stockage Bubble et retourne l'URL publique."""
+    try:
+        bubble_upload_url = "https://gardenmasteria.bubbleapps.io/version-test/api/1.1/wf/fileupload"  # Vérifiez l'URL exacte pour le stockage Bubble
+        files = {
+            "file": (filename, image_buffer, "image/png")
+        }
+        headers = {"Authorization": f"Bearer {API_KEY}"}
+
+        response = requests.post(bubble_upload_url, files=files, headers=headers)
+        response.raise_for_status()
+        
+        # Bubble renvoie une URL dans `body.url`
+        uploaded_file_url = response.json()["body"]["url"]
+        return uploaded_file_url
+
+    except Exception as e:
+        raise ValueError(f"Erreur lors de l'upload de l'image sur Bubble : {str(e)}")
+
 @app.route("/save_annotation", methods=["POST"])
 def save_annotation():
     """
     Reçoit les annotations, génère une image annotée,
-    et les envoie à Bubble avec l'image.
+    télécharge l'image vers Bubble Storage,
+    et envoie les données au workflow.
     """
     data = request.json
     image_url = data.get("image_url")
     annotations = data.get("annotations", [])
-    user = data.get("user")  # Ajout du paramètre user
-    bubble_save_url = data.get("bubble_save_url") or "https://gardenmasteria.bubbleapps.io/version-test/api/1.1/wf/receive_annotations"
+    user = data.get("user")
+    bubble_save_url = data.get("bubble_save_url")
 
     if not image_url or not bubble_save_url or not user:
         return jsonify({
@@ -109,57 +128,53 @@ def save_annotation():
             "message": "Paramètres manquants : image_url, bubble_save_url ou user absent."
         }), 400
 
-    if not isinstance(annotations, list) or len(annotations) == 0:
+    if not isinstance(annotations, list) or any("x" not in point or "y" not in point for point in annotations):
         return jsonify({
             "success": False,
-            "message": "Aucune annotation valide reçue."
+            "message": "Annotations non valides."
         }), 400
 
     try:
-        # Télécharger l'image originale
+        # Générer l'image annotée
         response = requests.get(image_url)
         response.raise_for_status()
         image = Image.open(BytesIO(response.content))
-
-        # Dessiner les annotations sur l'image
         draw = ImageDraw.Draw(image)
         for i, point in enumerate(annotations):
             if i < len(annotations) - 1:
                 next_point = annotations[i + 1]
             else:
-                next_point = annotations[0]  # Fermer le polygone
-            draw.line(
-                [(point["x"], point["y"]), (next_point["x"], next_point["y"])],
-                fill="red", width=3
-            )
+                next_point = annotations[0]
+            draw.line([(point["x"], point["y"]), (next_point["x"], next_point["y"])], fill="red", width=3)
 
-        # Sauvegarder l'image annotée dans un buffer
+        # Sauvegarder dans un buffer
         buffer = BytesIO()
         image.save(buffer, format="PNG")
         buffer.seek(0)
 
-        # Préparer les données pour Bubble
-        files = {
-            "annotated_image": ("annotated_image.png", buffer, "image/png"),
-        }
+        # Télécharger sur Bubble Storage
+        annotated_image_url = upload_to_bubble_storage(buffer)
+
+        # Préparer les données pour le workflow
         payload = {
             "url_image": image_url,
+            "annotated_image": annotated_image_url,  # URL de l'image uploadée
             "polygon_points": json.dumps(annotations),
             "user": user,
         }
 
         headers = {"Authorization": f"Bearer {API_KEY}"}
 
-        # Envoyer l'image annotée à Bubble
-        response = requests.post(bubble_save_url, data=payload, files=files, headers=headers)
+        # Envoyer au workflow
+        response = requests.post(bubble_save_url, json=payload, headers=headers)
         response.raise_for_status()
 
-        return jsonify({"success": True, "message": "Annotation et image envoyées à Bubble avec succès."})
+        return jsonify({"success": True, "message": "Données et image annotée envoyées à Bubble avec succès."})
 
     except Exception as e:
         return jsonify({
             "success": False,
-            "message": f"Erreur lors de la génération ou l'envoi de l'image : {str(e)}"
+            "message": f"Erreur : {str(e)}"
         }), 500
 
 if __name__ == "__main__":
