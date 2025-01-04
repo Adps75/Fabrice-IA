@@ -139,6 +139,16 @@ function canvasToImageCoords(cx, cy) {
     };
 }
 
+// Seuil pour considérer que le dernier point est proche du premier
+const CLOSE_THRESHOLD = 10;
+
+// Fonction pour vérifier si le dernier point est proche du premier
+function isCloseToFirstPoint(lastPoint, firstPoint) {
+    const dx = lastPoint.x - firstPoint.x;
+    const dy = lastPoint.y - firstPoint.y;
+    return Math.sqrt(dx * dx + dy * dy) < CLOSE_THRESHOLD;
+}
+
 // Clic sur le canvas pour ajouter un point si mode=add
 canvas.addEventListener("click", (e) => {
     if (mode === "add") {
@@ -149,7 +159,16 @@ canvas.addEventListener("click", (e) => {
 
         if (imgCoords.x >= 0 && imgCoords.x <= image.width &&
             imgCoords.y >= 0 && imgCoords.y <= image.height) {
+            
+            // Ajouter le point aux annotations
             annotations.push({ x: imgCoords.x, y: imgCoords.y });
+
+            // Vérifier si le dernier point est proche du premier
+            if (annotations.length > 2 && isCloseToFirstPoint(annotations[annotations.length - 1], annotations[0])) {
+                // Ajouter le premier point à la fin pour fermer le polygone
+                annotations.push(annotations[0]);
+            }
+
             redrawCanvas();
         }
     }
