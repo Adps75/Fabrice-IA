@@ -94,7 +94,7 @@ def detect_objects():
 def upload_to_bubble_storage(image_buffer, filename="annotated_image.png"):
     """Télécharge l'image vers le stockage Bubble et retourne l'URL publique."""
     try:
-        bubble_upload_url = "https://gardenmasteria.bubbleapps.io/version-test/fileupload"  # Vérifiez l'URL exacte pour le stockage Bubble
+        bubble_upload_url = "https://gardenmasteria.bubbleapps.io/version-test/fileupload"  # Vérifiez l'URL exacte
         files = {
             "file": (filename, image_buffer, "image/png")
         }
@@ -102,20 +102,19 @@ def upload_to_bubble_storage(image_buffer, filename="annotated_image.png"):
 
         response = requests.post(bubble_upload_url, files=files, headers=headers)
         response.raise_for_status()
-        
-        # Extraire l'URL de réponse
-        uploaded_file_url = response.json().get("body", {}).get("url")
-        if not uploaded_file_url:
-            raise ValueError("Bubble n'a pas renvoyé d'URL.")
 
-        # Corriger l'URL si elle est relative
-        if uploaded_file_url.startswith("//"):
-            uploaded_file_url = "https:" + uploaded_file_url
+        # Vérifiez si la réponse est bien formatée en JSON
+        try:
+            response_data = response.json()
+        except json.JSONDecodeError:
+            raise ValueError(f"Réponse inattendue de Bubble : {response.text}")
 
-        return uploaded_file_url
+        # Assurez-vous que la clé "body" existe et contient "url"
+        if not isinstance(response_data, dict) or "body" not in response_data or "url" not in response_data["body"]:
+            raise ValueError(f"Réponse inattendue de Bubble : {response_data}")
 
-    except Exception as e:
-        raise ValueError(f"Erreur lors de l'upload de l'image sur Bubble : {str(e)}")
+        # Retournez l'URL
+        return response_data["body"]["url"]
 
     except Exception as e:
         raise ValueError(f"Erreur lors de l'upload de l'image sur Bubble : {str(e)}")
