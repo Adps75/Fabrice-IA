@@ -20,6 +20,7 @@ def home():
 def annotate_image(image_url, annotations):
     try:
         response = requests.get(image_url)
+        response.raise_for_status()
         img = Image.open(BytesIO(response.content)).convert("RGB")
         draw = ImageDraw.Draw(img)
 
@@ -101,10 +102,13 @@ def upload_to_bubble_storage(image_buffer, filename="annotated_image.png"):
 
         response = requests.post(bubble_upload_url, files=files, headers=headers)
         response.raise_for_status()
-        
+
         # Bubble renvoie une URL dans `body.url`
-        uploaded_file_url = response.json()["body"]["url"]
-        return uploaded_file_url
+        response_json = response.json()
+        if "body" in response_json and "url" in response_json["body"]:
+            return response_json["body"]["url"]
+        else:
+            raise ValueError(f"Réponse inattendue de Bubble : {response_json}")
 
     except Exception as e:
         raise ValueError(f"Erreur lors de l'upload de l'image sur Bubble : {str(e)}")
