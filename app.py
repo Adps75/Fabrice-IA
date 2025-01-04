@@ -102,13 +102,20 @@ def upload_to_bubble_storage(image_buffer, filename="annotated_image.png"):
 
         response = requests.post(bubble_upload_url, files=files, headers=headers)
         response.raise_for_status()
+        
+        # Extraire l'URL de réponse
+        uploaded_file_url = response.json().get("body", {}).get("url")
+        if not uploaded_file_url:
+            raise ValueError("Bubble n'a pas renvoyé d'URL.")
 
-        # Bubble renvoie une URL dans `body.url`
-        response_json = response.json()
-        if "body" in response_json and "url" in response_json["body"]:
-            return response_json["body"]["url"]
-        else:
-            raise ValueError(f"Réponse inattendue de Bubble : {response_json}")
+        # Corriger l'URL si elle est relative
+        if uploaded_file_url.startswith("//"):
+            uploaded_file_url = "https:" + uploaded_file_url
+
+        return uploaded_file_url
+
+    except Exception as e:
+        raise ValueError(f"Erreur lors de l'upload de l'image sur Bubble : {str(e)}")
 
     except Exception as e:
         raise ValueError(f"Erreur lors de l'upload de l'image sur Bubble : {str(e)}")
