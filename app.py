@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from io import BytesIO
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageResampling
 import requests
 import json
 import os
@@ -56,7 +56,7 @@ def annotate_image_with_zoom(image_url, annotations, canvas_size=(800, 600)):
 
         # Redimensionner l'image en appliquant le zoom
         resized_img = img.resize(
-            (int(img.width * zoom_scale), int(img.height * zoom_scale)), Image.ANTIALIAS
+            (int(img.width * zoom_scale), int(img.height * zoom_scale)), ImageResampling.LANCZOS
         )
 
         # Créer un nouveau canvas avec le canvas_size
