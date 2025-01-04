@@ -3,11 +3,13 @@ from flask_cors import CORS
 from io import BytesIO
 from PIL import Image, ImageDraw
 
-try:
-    from PIL import ImageResampling  # Pillow >= 10.0.0
-    RESAMPLING = ImageResampling.LANCZOS
-except ImportError:
-    RESAMPLING = Image.ANTIALIAS  # Versions antérieures
+# Définir le mode de resampling (directement LANCZOS)
+RESAMPLING = Image.LANCZOS  # Pillow >= 7.0.0
+
+# Utilisation de RESAMPLING dans le redimensionnement
+# Exemple d'utilisation dans une fonction :
+def resize_image(img, new_width, new_height):
+    return img.resize((new_width, new_height), RESAMPLING)
 
 import requests
 import json
