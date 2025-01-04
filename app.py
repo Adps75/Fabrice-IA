@@ -1,7 +1,14 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from io import BytesIO
-from PIL import Image, ImageDraw, ImageResampling
+from PIL import Image, ImageDraw
+
+try:
+    from PIL import ImageResampling  # Pillow >= 10.0.0
+    RESAMPLING = ImageResampling.LANCZOS
+except ImportError:
+    RESAMPLING = Image.ANTIALIAS  # Versions antérieures
+
 import requests
 import json
 import os
