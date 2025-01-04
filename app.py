@@ -3,6 +3,7 @@ from flask_cors import CORS
 from io import BytesIO
 from PIL import Image, ImageDraw
 
+# Correction pour le resampling
 try:
     from PIL.Image import Resampling  # Pillow >= 10.0.0
     RESAMPLING = Resampling.LANCZOS
@@ -63,7 +64,7 @@ def annotate_image_with_zoom(image_url, annotations, canvas_size=(800, 600)):
 
         # Redimensionner l'image en appliquant le zoom
         resized_img = img.resize(
-            (int(img.width * zoom_scale), int(img.height * zoom_scale)), ImageResampling.LANCZOS
+            (int(img.width * zoom_scale), int(img.height * zoom_scale)), RESAMPLING
         )
 
         # Créer un nouveau canvas avec le canvas_size
