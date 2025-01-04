@@ -2,6 +2,5 @@ flask
 flask-cors
 ultralytics
 requests
-Pillow
 Pillow>=10.0.0
 opencv-python-headless
