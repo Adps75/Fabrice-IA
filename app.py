@@ -96,18 +96,34 @@ def upload_to_bubble_storage(image_buffer, filename="annotated_image.png"):
         response = requests.post(bubble_upload_url, files=files, headers=headers)
         response.raise_for_status()
 
-        # Vérifiez si la réponse est en JSON
+        # Debug : afficher la réponse brute
+        print("RAW response:", repr(response.text))
+
+        # Nettoyer la réponse : enlever les guillemets et espaces autour
+        clean_resp = response.text.strip().strip('"').strip()
+
+        # 1) Tentative de parsing JSON (Bubble peut parfois renvoyer un JSON)
         try:
-            response_data = response.json()
-            if "body" in response_data and "url" in response_data["body"]:
+            response_data = json.loads(clean_resp)
+            # Vérifier si la clé 'body' et 'url' existe
+            if (
+                isinstance(response_data, dict) 
+                and "body" in response_data 
+                and "url" in response_data["body"]
+            ):
                 return response_data["body"]["url"]
         except json.JSONDecodeError:
             pass
 
-        # Si la réponse est une URL brute
-        if response.text.startswith("http") or response.text.startswith("//"):
-            return response.text.strip()
+        # 2) Vérifier si la réponse est une URL relative (commence par "//")
+        if clean_resp.startswith("//"):
+            return f"https:{clean_resp}"
 
+        # 3) Vérifier si la réponse est déjà une URL complète (http ou https)
+        if clean_resp.startswith("http"):
+            return clean_resp
+
+        # Si on n'a pas réussi à extraire l'URL, lever une erreur
         raise ValueError(f"Réponse inattendue de Bubble : {response.text}")
 
     except Exception as e:
