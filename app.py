@@ -77,7 +77,7 @@ def annotate_image_with_zoom(image_url, points, canvas_size=(800, 600)):
             )
             for point in points
         ]
-        draw.polygon(scaled_points, outline="red", fill=None, width=3)
+        draw.polygon(scaled_points, outline="red", fill=(255, 0, 0, 128), width=5)
 
         return canvas
 
