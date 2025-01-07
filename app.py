@@ -68,8 +68,11 @@ def annotate_image_with_zoom(image_url, points, canvas_size=(800, 600)):
         canvas = Image.new("RGB", canvas_size, (255, 255, 255))
         canvas.paste(resized_img, (int(offset_x), int(offset_y)))
 
-        # Dessiner le polygone
-        draw = ImageDraw.Draw(canvas)
+        # Créer une couche temporaire pour la transparence
+        overlay = Image.new("RGBA", canvas.size, (255, 255, 255, 0))
+        overlay_draw = ImageDraw.Draw(overlay)
+
+        # Points scalés pour le zoom
         scaled_points = [
             (
                 (point["x"] * zoom_scale) + offset_x,
@@ -77,13 +80,21 @@ def annotate_image_with_zoom(image_url, points, canvas_size=(800, 600)):
             )
             for point in points
         ]
-        draw.polygon(scaled_points, outline="red", fill=(255, 0, 0, 128), width=5)
 
-        return canvas
+        # Dessiner le remplissage semi-transparent sur l'overlay
+        overlay_draw.polygon(scaled_points, fill=(255, 0, 0, 128))
+
+        # Dessiner le contour sur l'overlay
+        overlay_draw.line(scaled_points + [scaled_points[0]], fill=(255, 0, 0, 255), width=5)
+
+        # Combiner l'overlay avec le canvas principal
+        canvas = Image.alpha_composite(canvas.convert("RGBA"), overlay)
+
+        return canvas.convert("RGB")  # Retourner au mode RGB si nécessaire
 
     except Exception as e:
         raise ValueError(f"Erreur lors de l'annotation de l'image : {e}")
-
+        
 # Fonction pour uploader une image vers Bubble Storage
 def upload_to_bubble_storage(image_buffer, filename="annotated_image.png"):
     try:
