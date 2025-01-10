@@ -16,6 +16,10 @@ API_KEY = "bd9d52db77e424541731237a6c6763db"
 def home():
     return "Bienvenue sur l'éditeur Python pour Bubble (YOLOv8 + Annotations) !"
 
+# =====================================================================================
+# Fonctions utilitaires
+# =====================================================================================
+
 # Fonction pour calculer les limites du polygone
 def calculate_polygon_bounds(points):
     xs = [point['x'] for point in points]
@@ -94,8 +98,34 @@ def annotate_image_with_zoom(image_url, points, canvas_size=(800, 600)):
 
     except Exception as e:
         raise ValueError(f"Erreur lors de l'annotation de l'image : {e}")
-        
+
+# Fonction pour générer un masque noir et blanc
+def generate_mask(image_url, points):
+    """
+    Crée un masque noir et blanc où les annotations sont blanches (255) sur fond noir (0).
+    """
+    try:
+        # Télécharger l'image pour récupérer ses dimensions
+        response = requests.get(image_url)
+        response.raise_for_status()
+        img = Image.open(BytesIO(response.content)).convert("RGB")
+
+        # Créer une image noire de la même taille que l'image originale
+        mask = Image.new("L", img.size, 0)  # Noir (0)
+        draw_mask = ImageDraw.Draw(mask)
+
+        # Dessiner le polygone directement sur le masque
+        polygon_points = [(point["x"], point["y"]) for point in points]
+        draw_mask.polygon(polygon_points, fill=255)  # Blanc (255)
+
+        return mask
+
+    except Exception as e:
+        raise ValueError(f"Erreur lors de la génération du masque : {e}")
+
+# =====================================================================================
 # Fonction pour uploader une image vers Bubble Storage
+# =====================================================================================
 def upload_to_bubble_storage(image_buffer, filename="annotated_image.png"):
     try:
         bubble_upload_url = "https://gardenmasteria.bubbleapps.io/version-test/fileupload"
@@ -107,45 +137,25 @@ def upload_to_bubble_storage(image_buffer, filename="annotated_image.png"):
         response = requests.post(bubble_upload_url, files=files, headers=headers)
         response.raise_for_status()
 
-        # Debug : afficher la réponse brute
-        print("RAW response:", repr(response.text))
-
-        # Nettoyer la réponse : enlever les guillemets et espaces autour
         clean_resp = response.text.strip().strip('"').strip()
-
-        # 1) Tentative de parsing JSON (Bubble peut parfois renvoyer un JSON)
-        try:
-            response_data = json.loads(clean_resp)
-            # Vérifier si la clé 'body' et 'url' existe
-            if (
-                isinstance(response_data, dict) 
-                and "body" in response_data 
-                and "url" in response_data["body"]
-            ):
-                return response_data["body"]["url"]
-        except json.JSONDecodeError:
-            pass
-
-        # 2) Vérifier si la réponse est une URL relative (commence par "//")
         if clean_resp.startswith("//"):
             return f"https:{clean_resp}"
-
-        # 3) Vérifier si la réponse est déjà une URL complète (http ou https)
         if clean_resp.startswith("http"):
             return clean_resp
 
-        # Si on n'a pas réussi à extraire l'URL, lever une erreur
         raise ValueError(f"Réponse inattendue de Bubble : {response.text}")
 
     except Exception as e:
         raise ValueError(f"Erreur lors de l'upload de l'image sur Bubble : {e}")
 
+# =====================================================================================
+# Endpoint principal
+# =====================================================================================
 @app.route("/save_annotation", methods=["POST"])
 def save_annotation():
     """
-    Reçoit les annotations, génère une image annotée,
-    télécharge l'image vers Bubble Storage,
-    et envoie les données au workflow.
+    Reçoit les annotations, génère une image annotée et un masque,
+    télécharge les deux sur Bubble Storage, et envoie les données au workflow.
     """
     data = request.json
     image_url = data.get("image_url")
@@ -166,22 +176,31 @@ def save_annotation():
         }), 400
 
     try:
-        # Générer l'image annotée avec zoom et centrage
-        canvas_size = (800, 600)  # Dimensions fixes ou dynamiques selon votre besoin
+        # Générer l'image annotée
+        canvas_size = (800, 600)
         annotated_image = annotate_image_with_zoom(image_url, annotations, canvas_size)
 
-        # Sauvegarder l'image annotée dans un buffer
-        buffer = BytesIO()
-        annotated_image.save(buffer, format="PNG")
-        buffer.seek(0)
+        # Générer le masque
+        mask_image = generate_mask(image_url, annotations)
+
+        # Sauvegarder l'image annotée et le masque dans des buffers
+        buffer_annotated = BytesIO()
+        annotated_image.save(buffer_annotated, format="PNG")
+        buffer_annotated.seek(0)
+
+        buffer_mask = BytesIO()
+        mask_image.save(buffer_mask, format="PNG")
+        buffer_mask.seek(0)
 
         # Télécharger sur Bubble Storage
-        annotated_image_url = upload_to_bubble_storage(buffer)
+        annotated_image_url = upload_to_bubble_storage(buffer_annotated, filename="annotated_image.png")
+        mask_image_url = upload_to_bubble_storage(buffer_mask, filename="mask_image.png")
 
         # Préparer les données pour le workflow
         payload = {
             "url_image": image_url,
-            "annotated_image": annotated_image_url,  # URL de l'image uploadée
+            "annotated_image": annotated_image_url,
+            "mask_image": mask_image_url,
             "polygon_points": json.dumps(annotations),
             "user": user,
         }
@@ -192,7 +211,7 @@ def save_annotation():
         response = requests.post(bubble_save_url, json=payload, headers=headers)
         response.raise_for_status()
 
-        return jsonify({"success": True, "message": "Données et image annotée envoyées à Bubble avec succès."})
+        return jsonify({"success": True, "message": "Données, image annotée, et masque envoyés à Bubble avec succès."})
 
     except Exception as e:
         return jsonify({
@@ -200,6 +219,9 @@ def save_annotation():
             "message": f"Erreur : {e}"
         }), 500
 
+# =====================================================================================
+# Lancement de l'application
+# =====================================================================================
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=True)
