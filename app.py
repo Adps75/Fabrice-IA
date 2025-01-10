@@ -278,52 +278,30 @@ def save_annotation():
 # =====================================================================================
 
 @app.route("/generate_image", methods=["POST"])
-def generate_image_endpoint():
+def generate_image():
     """
-    Endpoint pour générer une image avec Stable Diffusion.
+    Endpoint pour appliquer des prompts (général et spécifiques) avec Stable Diffusion XL.
     """
     data = request.json
     image_url = data.get("image_url")
-    mask_url = data.get("mask_url")
-    prompt = data.get("prompt")
-    negative_prompt = data.get("negative_prompt", "")
-    guidance_scale = data.get("guidance_scale", 7.5)
-    steps = data.get("steps", 50)
+    general_prompt = data.get("general_prompt")
+    elements = data.get("elements", [])
 
-    if not image_url or not mask_url or not prompt:
-        return jsonify({"success": False, "message": "Paramètres manquants : image_url, mask_url ou prompt absent."}), 400
+    if not image_url or not general_prompt:
+        return jsonify({"success": False, "message": "Paramètres manquants : image_url ou general_prompt absent."}), 400
 
     try:
-        # Télécharger l'image initiale et le masque
-        init_image_response = requests.get(image_url)
-        init_image_response.raise_for_status()
-        init_image = Image.open(BytesIO(init_image_response.content)).convert("RGB")
+        # Appeler la fonction Stable Diffusion
+        generated_image = apply_prompts_with_masks(image_url, general_prompt, elements)
+        
+        # Sauvegarder l'image générée
+        generated_image_path = "generated_image.png"
+        generated_image.save(generated_image_path)
 
-        mask_image_response = requests.get(mask_url)
-        mask_image_response.raise_for_status()
-        mask_image = Image.open(BytesIO(mask_image_response.content)).convert("L")  # Le masque doit être en niveaux de gris
+        # Retourner l'URL de l'image générée
+        return jsonify({"success": True, "generated_image_url": request.host_url + generated_image_path})
     except Exception as e:
-        return jsonify({"success": False, "message": f"Erreur lors du téléchargement des images : {str(e)}"}), 400
-
-    try:
-        # Générer l'image
-        generated_image = generate_image(
-            init_image=init_image,
-            mask_image=mask_image,
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            guidance_scale=guidance_scale,
-            num_inference_steps=steps,
-        )
-
-        # Sauvegarder l'image générée en mémoire
-        img_io = BytesIO()
-        generated_image.save(img_io, format="PNG")
-        img_io.seek(0)
-
-        return jsonify({"success": True, "generated_image": "data:image/png;base64," + img_io.getvalue().hex()})
-    except Exception as e:
-        return jsonify({"success": False, "message": f"Erreur lors de la génération de l'image : {str(e)}"}), 500
+        return jsonify({"success": False, "message": f"Erreur lors de la génération avec Stable Diffusion : {str(e)}"}), 500
 
 # =====================================================================================
 # 6) Lancement de l'application
