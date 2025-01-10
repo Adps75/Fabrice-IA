@@ -17,7 +17,55 @@ def home():
     return "Bienvenue sur l'éditeur Python pour Bubble (YOLOv8 + Annotations) !"
 
 # =====================================================================================
-# 1) Fonctions utilitaires pour l'annotation et le masque
+# 1) Endpoint pour YOLOv8 : /detect_objects
+# =====================================================================================
+@app.route("/detect_objects", methods=["POST"])
+def detect_objects():
+    """
+    Analyse une image pour détecter des objets avec YOLOv8.
+    """
+    data = request.json
+    image_url = data.get("image_url")
+    bubble_save_url = data.get("bubble_save_url")
+
+    if not image_url or not bubble_save_url:
+        return jsonify({"success": False, "message": "Paramètres manquants : image_url ou bubble_save_url absent."}), 400
+
+    try:
+        # Télécharger l'image
+        response = requests.get(image_url)
+        response.raise_for_status()
+        img_data = BytesIO(response.content)
+        pil_image = Image.open(img_data).convert("RGB")
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Erreur téléchargement de l'image : {str(e)}"}), 400
+
+    try:
+        # Détecter les objets
+        detections = predict_objects(pil_image, conf_threshold=0.25)
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Erreur lors de la détection avec YOLOv8 : {str(e)}"}), 500
+
+    # Préparer les données pour Bubble
+    payload = {
+        "image_url": image_url,
+        "detections": json.dumps(detections)
+    }
+    headers = {
+        "Authorization": f"Bearer {API_KEY}",  # Clé API Bubble
+        "Content-Type": "application/json"
+    }
+
+    try:
+        # Envoyer les résultats à Bubble
+        bubble_response = requests.post(bubble_save_url, json=payload, headers=headers)
+        bubble_response.raise_for_status()
+        return jsonify({"success": True, "bubble_response": bubble_response.json()})
+    except Exception as e:
+        return jsonify({"success": False, "message": f"Erreur lors de l'envoi à Bubble : {str(e)}"}), 500
+
+# =====================================================================================
+# 2) Fonctions utilitaires pour l'annotation et le masque
 # =====================================================================================
 
 def calculate_polygon_bounds(points):
@@ -80,27 +128,6 @@ def generate_mask_from_annotations_no_zoom(image_url, points):
         raise ValueError(f"Erreur lors de la génération du masque : {e}")
 
 # =====================================================================================
-# 2) YOLOv8 Integration
-# =====================================================================================
-def integrate_yolo_predictions(image_url, user_annotations):
-    """
-    Intègre les prédictions YOLOv8 avec les annotations utilisateur.
-    """
-    try:
-        # Appeler YOLOv8 pour prédire les objets
-        yolo_predictions = predict_objects(image_url)
-
-        # Combiner les prédictions YOLOv8 avec les annotations utilisateur
-        combined_annotations = user_annotations + [
-            {"x": box["x"], "y": box["y"]} for box in yolo_predictions
-        ]
-
-        return combined_annotations
-
-    except Exception as e:
-        raise ValueError(f"Erreur lors de l'intégration YOLOv8 : {e}")
-
-# =====================================================================================
 # 3) Fonction d'upload vers Bubble
 # =====================================================================================
 def upload_to_bubble_storage(image_buffer, filename="image.png"):
@@ -135,12 +162,11 @@ def upload_to_bubble_storage(image_buffer, filename="image.png"):
 @app.route("/save_annotation", methods=["POST"])
 def save_annotation():
     """
-    Reçoit les annotations, génère :
+    Reçoit les annotations utilisateur, génère :
       - une image annotée
-      - un masque
-      - ajoute les prédictions YOLOv8
+      - un masque noir & blanc
     puis télécharge les deux vers Bubble,
-    et renvoie un JSON final (utilisable pour Stable Diffusion).
+    et renvoie un JSON final.
     """
     data = request.json
     image_url = data.get("image_url")
@@ -161,15 +187,12 @@ def save_annotation():
         }), 400
 
     try:
-        # Intégrer les prédictions YOLOv8 avec les annotations utilisateur
-        combined_annotations = integrate_yolo_predictions(image_url, annotations)
-
         # Générer l'image annotée
         canvas_size = (800, 600)
-        annotated_image = annotate_image_with_zoom(image_url, combined_annotations, canvas_size)
+        annotated_image = annotate_image_with_zoom(image_url, annotations, canvas_size)
 
         # Générer le masque (noir & blanc)
-        mask_image = generate_mask_from_annotations_no_zoom(image_url, combined_annotations)
+        mask_image = generate_mask_from_annotations_no_zoom(image_url, annotations)
 
         # Uploader l'image annotée
         buffer_annotated = BytesIO()
@@ -183,12 +206,12 @@ def save_annotation():
         buffer_mask.seek(0)
         mask_image_url = upload_to_bubble_storage(buffer_mask, filename="mask_image.png")
 
-        # Préparer les données pour Bubble ou Stable Diffusion
+        # Préparer les données pour Bubble ou un autre service
         payload = {
             "url_image": image_url,
             "annotated_image": annotated_image_url,
             "mask_image": mask_image_url,
-            "combined_annotations": json.dumps(combined_annotations),
+            "polygon_points": json.dumps(annotations),
             "user": user
         }
 
