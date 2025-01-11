@@ -281,26 +281,19 @@ def save_annotation():
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
     """
-    Endpoint pour générer une image avec Stable Diffusion via l'API Hugging Face.
+    Génère une image avec Stable Diffusion via Replicate.
     """
     try:
         # Récupérer les données entrantes
         data = request.json
-        image_url = data["image_url"]
-        general_prompt = data.get("general_prompt", None)
-        elements = data.get("elements", [])
+        prompt = data.get("prompt")
+        if not prompt:
+            return jsonify({"success": False, "message": "Le prompt est obligatoire."}), 400
 
-        # Appeler la fonction pour appliquer les prompts
-        result_image = apply_prompts_with_masks(image_url, general_prompt, elements)
+        # Appeler la fonction pour générer une image
+        generated_image_url = generate_image_with_replicate(prompt)
 
-        # Sauvegarder l'image générée en mémoire
-        output_buffer = BytesIO()
-        result_image.save(output_buffer, format="PNG")
-        output_buffer.seek(0)
-
-        # Télécharger sur Bubble Storage
-        generated_image_url = upload_to_bubble_storage(output_buffer, filename="generated_image.png")
-
+        # Retourner l'URL de l'image générée
         return jsonify({"success": True, "generated_image_url": generated_image_url})
 
     except Exception as e:
