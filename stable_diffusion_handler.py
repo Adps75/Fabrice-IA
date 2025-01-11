@@ -7,10 +7,6 @@ from io import BytesIO
 def apply_prompts_with_masks(image_url, general_prompt, elements):
     """
     Applique un prompt général et des prompts spécifiques avec des masques.
-    :param image_url: URL de l'image originale.
-    :param general_prompt: Prompt général pour l'image.
-    :param elements: Liste de dicts contenant 'mask', 'class', 'specific_prompt'.
-    :return: Image modifiée générée par SDXL.
     """
     try:
         # Charger le pipeline
