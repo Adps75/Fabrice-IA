@@ -280,31 +280,29 @@ def save_annotation():
 
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
+    """
+    Endpoint pour générer une image avec Stable Diffusion via l'API Hugging Face.
+    """
     try:
-        # Données entrantes
+        # Récupérer les données entrantes
         data = request.json
         image_url = data["image_url"]
         general_prompt = data.get("general_prompt", None)
         elements = data.get("elements", [])
 
-        # Téléchargement de l'image originale
-        response = requests.get(image_url)
-        response.raise_for_status()
-        image_path = BytesIO(response.content)
+        # Appeler la fonction pour appliquer les prompts
+        result_image = apply_prompts_with_masks(image_url, general_prompt, elements)
 
-        # Application des prompts
-        masks_with_prompts = [
-            {"mask": elem["mask"], "specific_prompt": elem["specific_prompt"]}
-            for elem in elements
-        ]
-        result_image = apply_prompts_with_masks(image_path, masks_with_prompts, general_prompt)
+        # Sauvegarder l'image générée en mémoire
+        output_buffer = BytesIO()
+        result_image.save(output_buffer, format="PNG")
+        output_buffer.seek(0)
 
-        # Sauvegarder l'image générée
-        output_path = "generated_image.png"
-        result_image.save(output_path)
+        # Télécharger sur Bubble Storage
+        generated_image_url = upload_to_bubble_storage(output_buffer, filename="generated_image.png")
 
-        # Retourner l'URL de l'image générée
-        return jsonify({"success": True, "generated_image_url": output_path})
+        return jsonify({"success": True, "generated_image_url": generated_image_url})
+
     except Exception as e:
         return jsonify({"success": False, "message": f"Erreur lors de la génération avec Stable Diffusion : {str(e)}"}), 500
 
