@@ -7,6 +7,7 @@ import json
 import os
 from yolo_handler import predict_objects  # Fonction pour YOLOv8
 from stable_diffusion_handler import generate_image # Fonction pour StableDiffusion
+from stable_diffusion_handler import apply_prompts_with_masks  # Module Prompt pour StableDiffusion
 
 
 app = Flask(__name__)
@@ -279,27 +280,31 @@ def save_annotation():
 
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
-    """
-    Endpoint pour appliquer des prompts (général et spécifiques) avec Stable Diffusion XL.
-    """
-    data = request.json
-    image_url = data.get("image_url")
-    general_prompt = data.get("general_prompt")
-    elements = data.get("elements", [])
-
-    if not image_url or not general_prompt:
-        return jsonify({"success": False, "message": "Paramètres manquants : image_url ou general_prompt absent."}), 400
-
     try:
-        # Appeler la fonction Stable Diffusion
-        generated_image = apply_prompts_with_masks(image_url, general_prompt, elements)
-        
+        # Données entrantes
+        data = request.json
+        image_url = data["image_url"]
+        general_prompt = data.get("general_prompt", None)
+        elements = data.get("elements", [])
+
+        # Téléchargement de l'image originale
+        response = requests.get(image_url)
+        response.raise_for_status()
+        image_path = BytesIO(response.content)
+
+        # Application des prompts
+        masks_with_prompts = [
+            {"mask": elem["mask"], "specific_prompt": elem["specific_prompt"]}
+            for elem in elements
+        ]
+        result_image = apply_prompts_with_masks(image_path, masks_with_prompts, general_prompt)
+
         # Sauvegarder l'image générée
-        generated_image_path = "generated_image.png"
-        generated_image.save(generated_image_path)
+        output_path = "generated_image.png"
+        result_image.save(output_path)
 
         # Retourner l'URL de l'image générée
-        return jsonify({"success": True, "generated_image_url": request.host_url + generated_image_path})
+        return jsonify({"success": True, "generated_image_url": output_path})
     except Exception as e:
         return jsonify({"success": False, "message": f"Erreur lors de la génération avec Stable Diffusion : {str(e)}"}), 500
 
