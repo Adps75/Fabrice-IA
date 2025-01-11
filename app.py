@@ -6,8 +6,7 @@ import requests
 import json
 import os
 from yolo_handler import predict_objects  # Fonction pour YOLOv8
-from stable_diffusion_handler import generate_image # Fonction pour StableDiffusion
-from stable_diffusion_handler import apply_prompts_with_masks  # Module Prompt pour StableDiffusion
+from stable_diffusion_handler import generate_image_with_replicate # Fonction pour StableDiffusion
 
 
 app = Flask(__name__)
@@ -286,12 +285,15 @@ def generate_image():
     try:
         # Récupérer les données entrantes
         data = request.json
-        prompt = data.get("prompt")
-        if not prompt:
-            return jsonify({"success": False, "message": "Le prompt est obligatoire."}), 400
+        image_url = data.get("image_url")
+        general_prompt = data.get("general_prompt")
+        elements = data.get("elements", [])  # Liste contenant les masques et prompts spécifiques
 
-        # Appeler la fonction pour générer une image
-        generated_image_url = generate_image_with_replicate(prompt)
+        if not image_url or not general_prompt:
+            return jsonify({"success": False, "message": "Paramètres manquants : image_url ou prompt général absent."}), 400
+
+        # Appeler la fonction pour générer une image avec Replicate
+        generated_image_url = generate_image_with_replicate(image_url, general_prompt, elements)
 
         # Retourner l'URL de l'image générée
         return jsonify({"success": True, "generated_image_url": generated_image_url})
