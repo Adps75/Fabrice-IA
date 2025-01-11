@@ -4,10 +4,4 @@ ultralytics
 requests
 Pillow>=10.0.0
 opencv-python-headless
-torch
-torchvision
-diffusers
-transformers
-accelerate
-safetensors
-huggingface-hub
+replicate
