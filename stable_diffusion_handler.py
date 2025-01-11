@@ -4,6 +4,16 @@ from PIL import Image
 import requests
 from io import BytesIO
 
+def generate_image(image_url, general_prompt=None, elements=None):
+    """
+    Fonction qui appelle apply_prompts_with_masks en interne,
+    afin de pouvoir être importée dans app.py sans générer d'erreur.
+    """
+    if elements is None:
+        elements = []
+
+    return apply_prompts_with_masks(image_url, general_prompt, elements)
+
 def apply_prompts_with_masks(image_url, general_prompt, elements):
     """
     Applique un prompt général et des prompts spécifiques avec des masques.
