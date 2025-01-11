@@ -2,7 +2,7 @@ import requests
 import os
 
 # Ajouter la clé API de Replicate dans les variables d'environnement
-os.environ["REPLICATE_API_TOKEN"] = "r8_Q5xqdEfGLdgTtF4YGRtDe8RuusV3DLC4BA554"
+os.environ["REPLICATE_API_TOKEN"] = "REPLICATE_API_TOKEN"
 
 def generate_image_with_replicate(image_url, general_prompt, elements):
     """
