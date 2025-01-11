@@ -23,6 +23,7 @@ def apply_prompts_with_masks(image_url, general_prompt, elements):
         device = "cuda" if torch.cuda.is_available() else "cpu"
         pipeline = StableDiffusionXLInpaintPipeline.from_pretrained(
             "stabilityai/stable-diffusion-xl-base",
+            use_auth_token="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",
             torch_dtype=torch.float16 if device == "cuda" else torch.float32
         ).to(device)
 
