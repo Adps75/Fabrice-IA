@@ -6,7 +6,7 @@ REPLICATE_API_TOKEN = "REPLICATE_API_TOKEN"
 
 def generate_image_with_replicate(image_url, general_prompt, elements):
     """
-    Génère une image avec Stable Diffusion 3.5 Medium via Replicate.
+    Génère une image avec Stable Diffusion via Replicate.
     Prend en compte un prompt général et une liste d'éléments avec masques et prompts spécifiques.
     """
     try:
@@ -19,7 +19,7 @@ def generate_image_with_replicate(image_url, general_prompt, elements):
                 "Content-Type": "application/json",
             },
             json={
-                "version": "stability-ai/stable-diffusion-3.5-medium",
+                "version": "stability-ai/stable-diffusion-inpainting",
                 "input": {
                     "image": image_url,
                     "prompt": general_prompt,
@@ -43,7 +43,7 @@ def generate_image_with_replicate(image_url, general_prompt, elements):
                     "Content-Type": "application/json",
                 },
                 json={
-                    "version": "stability-ai/stable-diffusion-3.5-medium",
+                    "version": "stability-ai/stable-diffusion-inpainting",
                     "input": {
                         "image": final_image_url,
                         "mask": mask_url,
