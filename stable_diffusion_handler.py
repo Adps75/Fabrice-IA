@@ -1,32 +1,54 @@
+from diffusers import StableDiffusionXLInpaintPipeline
 import torch
-from diffusers import StableDiffusionInpaintPipeline
 from PIL import Image
+import requests
 from io import BytesIO
 
-# Charger le pipeline de diffusion
-def load_pipeline(model_path="stabilityai/stable-diffusion-xl-base"):
+def apply_prompts_with_masks(image_url, general_prompt, elements):
     """
-    Charge le pipeline de Stable Diffusion pour l'inpainting.
+    Applique un prompt général et des prompts spécifiques avec des masques.
+    :param image_url: URL de l'image originale.
+    :param general_prompt: Prompt général pour l'image.
+    :param elements: Liste de dicts contenant 'mask', 'class', 'specific_prompt'.
+    :return: Image modifiée générée par SDXL.
     """
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    pipeline = StableDiffusionInpaintPipeline.from_pretrained(model_path, torch_dtype=torch.float16)
-    pipeline = pipeline.to(device)
-    return pipeline
+    try:
+        # Charger le pipeline
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        pipeline = StableDiffusionXLInpaintPipeline.from_pretrained(
+            "stabilityai/stable-diffusion-xl-base",
+            torch_dtype=torch.float16 if device == "cuda" else torch.float32
+        ).to(device)
 
-# Fonction pour générer une image
-def generate_image(init_image, mask_image, prompt, negative_prompt="", guidance_scale=7.5, num_inference_steps=50):
-    """
-    Génère une image basée sur une image initiale, un masque et un prompt utilisateur.
-    """
-    pipeline = load_pipeline()
-    
-    result = pipeline(
-        prompt=prompt,
-        negative_prompt=negative_prompt,
-        image=init_image,
-        mask_image=mask_image,
-        guidance_scale=guidance_scale,
-        num_inference_steps=num_inference_steps,
-    )
+        # Charger l'image d'origine
+        response = requests.get(image_url)
+        response.raise_for_status()
+        original_image = Image.open(BytesIO(response.content)).convert("RGB")
 
-    return result.images[0]  # Retourne l'image générée
+        # Appliquer le prompt général à l'image entière
+        result = pipeline(
+            prompt=general_prompt,
+            image=original_image
+        ).images[0]
+
+        # Appliquer les prompts spécifiques avec les masques
+        for element in elements:
+            mask_url = element["mask"]
+            specific_prompt = element["specific_prompt"]
+
+            # Charger le masque
+            mask_response = requests.get(mask_url)
+            mask_response.raise_for_status()
+            mask_image = Image.open(BytesIO(mask_response.content)).convert("RGB")
+
+            # Appliquer le prompt spécifique au masque
+            result = pipeline(
+                prompt=specific_prompt,
+                image=result,
+                mask_image=mask_image
+            ).images[0]
+
+        return result
+
+    except Exception as e:
+        raise RuntimeError(f"Erreur lors de la génération avec Stable Diffusion : {str(e)}")
