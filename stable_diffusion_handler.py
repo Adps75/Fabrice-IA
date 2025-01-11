@@ -1,42 +1,30 @@
-from huggingface_hub import InferenceClient
-from PIL import Image
-from io import BytesIO
+import replicate
 
-# Ajouter votre clé API Hugging Face
-API_TOKEN = "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"
+# Ajouter votre clé API Replicate
+REPLICATE_API_TOKEN = "r8_Kg6QqJdAWLJk16MIQ5bsuIcyNKi61ri1G28Ao"
 
-def apply_prompts_with_masks(image_url, general_prompt, elements):
+def generate_image_with_replicate(prompt):
     """
-    Applique un prompt général et des prompts spécifiques avec des masques via l'API Hugging Face.
+    Génère une image en utilisant le modèle Stable Diffusion 3.5-medium via Replicate.
     """
     try:
-        # Charger le client d'inférence
-        client = InferenceClient(model="stabilityai/stable-diffusion-xl-base-1.0", token=API_TOKEN)
+        # Authentification avec la clé API
+        replicate.Client(api_token=REPLICATE_API_TOKEN)
 
-        # Charger l'image originale
-        response = requests.get(image_url)
-        response.raise_for_status()
-        original_image = Image.open(BytesIO(response.content))
+        # Modèle utilisé
+        model = "stability-ai/stable-diffusion-3.5-medium"
 
-        # Appliquer le prompt général
-        print("[DEBUG] Appliquer le prompt général...")
-        generated_image = client.text_to_image(general_prompt)
+        # Exécution du modèle sur Replicate
+        print(f"[DEBUG] Génération d'image avec le prompt : {prompt}")
+        output = replicate.run(
+            f"{model}:predict",
+            input={"prompt": prompt}
+        )
 
-        # Boucle pour appliquer les prompts spécifiques avec les masques
-        for element in elements:
-            mask_url = element["mask"]
-            specific_prompt = element["specific_prompt"]
-
-            # Charger le masque
-            mask_response = requests.get(mask_url)
-            mask_response.raise_for_status()
-            mask_image = Image.open(BytesIO(mask_response.content))
-
-            print(f"[DEBUG] Appliquer le prompt spécifique : {specific_prompt}")
-            # API d'inférence ne supporte pas directement les masques,
-            # vous pouvez ajuster vos requêtes ici si l'API propose des extensions pour cela.
-
-        return generated_image
+        if isinstance(output, list) and len(output) > 0:
+            return output[0]  # Retourne l'URL de la première image générée
+        else:
+            raise RuntimeError("Aucune image générée par le modèle.")
 
     except Exception as e:
-        raise RuntimeError(f"Erreur lors de la génération avec Stable Diffusion via l'API : {str(e)}")
+        raise RuntimeError(f"Erreur lors de la génération avec Replicate : {str(e)}")
