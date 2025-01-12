@@ -7,18 +7,72 @@ import json
 import os
 from yolo_handler import predict_objects  # Fonction pour YOLOv8
 from stable_diffusion_handler import generate_image_with_replicate # Fonction pour StableDiffusion
-
+import openai
 
 app = Flask(__name__)
 CORS(app)  # Active CORS pour toutes les routes
 
 API_KEY = "bd9d52db77e424541731237a6c6763db"
+OPENAI_API_TOKEN = "OPENAI_API_TOKEN"
 
 
 @app.route("/")
 def home():
     return "Bienvenue sur l'éditeur Python pour Bubble (YOLOv8 + Annotations) !"
 
+# =====================================================================================
+# Endpoint ChatGPT : /reformulate_prompt (reformule les prompts des utilisateurs)
+# =====================================================================================
+
+@app.route("/reformulate_prompt", methods=["POST"])
+def reformulate_prompt():
+    """
+    Endpoint pour reformuler un prompt utilisateur en incluant un type de jardin.
+    """
+    try:
+        # Récupérer les données de la requête
+        data = request.json
+        user_prompt = data.get("user_prompt")  # Texte brut de l'utilisateur
+        garden_type = data.get("garden_type")  # Type de jardin choisi
+
+        if not user_prompt or not garden_type:
+            return jsonify({
+                "success": False,
+                "message": "Les paramètres user_prompt et garden_type sont requis."
+            }), 400
+
+        # Appel à l'API OpenAI pour reformuler le prompt
+        print("[DEBUG] Appel à l'API OpenAI pour reformuler le prompt...")
+        response = openai.ChatCompletion.create(
+            model="gpt-4",  # Utilisez le modèle que vous préférez (gpt-3.5-turbo ou gpt-4)
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Vous êtes un assistant expert en conception de jardin. Reformulez les instructions de l'utilisateur en fonction du type de jardin demandé et de son prompt."
+                },
+                {
+                    "role": "user",
+                    "content": f"Texte utilisateur : {user_prompt}. Type de jardin : {garden_type}."
+                }
+            ],
+            max_tokens=100,
+            temperature=0.7
+        )
+
+        # Extraire le texte généré
+        reformulated_prompt = response['choices'][0]['message']['content']
+
+        return jsonify({
+            "success": True,
+            "reformulated_prompt": reformulated_prompt
+        })
+
+    except Exception as e:
+        print(f"[ERROR] {str(e)}")
+        return jsonify({
+            "success": False,
+            "message": f"Erreur lors de la reformulation du prompt : {str(e)}"
+        }), 500
 
 # =====================================================================================
 # 1) Endpoint YOLOv8 : /detect_objects
