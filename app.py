@@ -24,54 +24,53 @@ def home():
 # Endpoint ChatGPT : /reformulate_prompt (reformule les prompts des utilisateurs)
 # =====================================================================================
 
+# Ajout de la fonction reformulate_prompt ici
+def reformulate_prompt(user_prompt, garden_type):
+    """
+    Reformule le prompt utilisateur pour inclure le type de jardin spécifié.
+    """
+    try:
+        # Appeler l'API OpenAI pour reformuler le prompt
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "Vous êtes un assistant expert en design de jardin."},
+                {"role": "user", "content": f"Reformulez ce prompt '{user_prompt}' en intégrant l'idée d'un '{garden_type}'."}
+            ],
+            max_tokens=200
+        )
+        # Extraire la reformulation
+        reformulated_prompt = response['choices'][0]['message']['content'].strip()
+        return reformulated_prompt
+    except Exception as e:
+        raise RuntimeError(f"Erreur lors de la reformulation : {e}")
+
+
 @app.route("/reformulate_prompt", methods=["POST"])
-def reformulate_prompt():
+def reformulate_prompt_endpoint():
     """
     Endpoint pour reformuler un prompt utilisateur en incluant un type de jardin.
     """
+    data = request.json
+    user_prompt = data.get("user_prompt")
+    garden_type = data.get("garden_type")
+
+    if not user_prompt or not garden_type:
+        return jsonify({
+            "success": False,
+            "message": "Paramètres manquants : 'user_prompt' ou 'garden_type' absent."
+        }), 400
+
     try:
-        # Récupérer les données de la requête
-        data = request.json
-        user_prompt = data.get("user_prompt")  # Texte brut de l'utilisateur
-        garden_type = data.get("garden_type")  # Type de jardin choisi
-
-        if not user_prompt or not garden_type:
-            return jsonify({
-                "success": False,
-                "message": "Les paramètres user_prompt et garden_type sont requis."
-            }), 400
-
-        # Appel à l'API OpenAI pour reformuler le prompt
-        print("[DEBUG] Appel à l'API OpenAI pour reformuler le prompt...")
-        response = openai.ChatCompletion.create(
-            model="gpt-4",  # Utilisez le modèle que vous préférez (gpt-3.5-turbo ou gpt-4)
-            messages=[
-                {
-                    "role": "system",
-                    "content": "Vous êtes un assistant expert en conception de jardin. Reformulez les instructions de l'utilisateur en fonction du type de jardin demandé et de son prompt."
-                },
-                {
-                    "role": "user",
-                    "content": f"Texte utilisateur : {user_prompt}. Type de jardin : {garden_type}."
-                }
-            ],
-            max_tokens=100,
-            temperature=0.7
-        )
-
-        # Extraire le texte généré
-        reformulated_prompt = response['choices'][0]['message']['content']
-
+        reformulated_prompt = reformulate_prompt(user_prompt, garden_type)
         return jsonify({
             "success": True,
             "reformulated_prompt": reformulated_prompt
         })
-
     except Exception as e:
-        print(f"[ERROR] {str(e)}")
         return jsonify({
             "success": False,
-            "message": f"Erreur lors de la reformulation du prompt : {str(e)}"
+            "message": f"Erreur lors de la reformulation du prompt : {e}"
         }), 500
 
 # =====================================================================================
