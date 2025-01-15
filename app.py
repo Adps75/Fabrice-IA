@@ -12,8 +12,11 @@ from openai import OpenAI
 app = Flask(__name__)
 CORS(app)  # Active CORS pour toutes les routes
 
+#Bubble API KEY
 API_KEY = "bd9d52db77e424541731237a6c6763db"
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+openai.organization = org-IysEI7dzkeSD08g3ehdOzvIa
 
 @app.route("/")
 def home():
@@ -23,55 +26,38 @@ def home():
 # Endpoint ChatGPT : /reformulate_prompt (reformule les prompts des utilisateurs)
 # =====================================================================================
 
-# Ajout de la fonction reformulate_prompt ici
-def reformulate_prompt(user_prompt, garden_type):
-    """
-    Reformule le prompt utilisateur pour inclure le type de jardin spécifié.
-    """
-    try:
-        # Appeler l'API OpenAI pour reformuler le prompt
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",  # Modèle recommandé pour les prompts
-            messages=[
-                {"role": "system", "content": "Vous êtes un assistant expert en design de jardin."},
-                {"role": "user", "content": f"Reformulez ce prompt : '{user_prompt}' en intégrant l'idée d'un '{garden_type}'."}
-            ],
-            max_tokens=200,
-            temperature=0.7
-        )
-        # Extraire la reformulation
-        reformulated_prompt = response.choices[0].message.content.strip()
-        return reformulated_prompt
-    except Exception as e:
-        raise RuntimeError(f"Erreur lors de la reformulation : {e}")
-
+# Configurez la clé API OpenAI
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 @app.route("/reformulate_prompt", methods=["POST"])
-def reformulate_prompt_endpoint():
+def reformulate_prompt():
     """
     Endpoint pour reformuler un prompt utilisateur en incluant un type de jardin.
     """
-    data = request.json
-    user_prompt = data.get("user_prompt")
-    garden_type = data.get("garden_type")
-
-    if not user_prompt or not garden_type:
-        return jsonify({
-            "success": False,
-            "message": "Paramètres manquants : 'user_prompt' ou 'garden_type' absent."
-        }), 400
-
     try:
-        reformulated_prompt = reformulate_prompt(user_prompt, garden_type)
-        return jsonify({
-            "success": True,
-            "reformulated_prompt": reformulated_prompt
-        })
+        data = request.json
+        user_prompt = data.get("user_prompt")
+        garden_type = data.get("garden_type")
+
+        if not user_prompt or not garden_type:
+            return jsonify({"success": False, "message": "Paramètres manquants : user_prompt ou garden_type."}), 400
+
+        # Appel à l'API OpenAI pour reformuler le prompt
+        response = openai.ChatCompletion.create(
+            model="gpt-4",  # Vous pouvez utiliser "gpt-3.5-turbo" si nécessaire
+            messages=[
+                {"role": "system", "content": "Tu es un assistant spécialisé dans la création de jardins."},
+                {"role": "user", "content": f"Type de jardin : {garden_type}. {user_prompt}"}
+            ]
+        )
+
+        # Extraire le texte généré
+        reformulated_prompt = response["choices"][0]["message"]["content"]
+
+        return jsonify({"success": True, "reformulated_prompt": reformulated_prompt})
+
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "message": f"Erreur lors de la reformulation du prompt : {e}"
-        }), 500
+        return jsonify({"success": False, "message": f"Erreur lors de la reformulation du prompt : {str(e)}"})
 
 # =====================================================================================
 # 1) Endpoint YOLOv8 : /detect_objects
