@@ -5,4 +5,4 @@ requests
 Pillow>=10.0.0
 opencv-python-headless
 replicate
-openai
+openai>=1.0.0
