@@ -7,7 +7,7 @@ import json
 import os
 from yolo_handler import predict_objects  # Fonction pour YOLOv8
 from stable_diffusion_handler import generate_image_with_replicate # Fonction pour StableDiffusion
-import openai
+from openai import OpenAI
 
 app = Flask(__name__)
 CORS(app)  # Active CORS pour toutes les routes
