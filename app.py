@@ -32,15 +32,16 @@ def reformulate_prompt(user_prompt, garden_type):
     try:
         # Appeler l'API OpenAI pour reformuler le prompt
         response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
+            model="gpt-3.5-turbo",  # Modèle recommandé pour les prompts
             messages=[
                 {"role": "system", "content": "Vous êtes un assistant expert en design de jardin."},
-                {"role": "user", "content": f"Reformulez ce prompt '{user_prompt}' en intégrant l'idée d'un '{garden_type}'."}
+                {"role": "user", "content": f"Reformulez ce prompt : '{user_prompt}' en intégrant l'idée d'un '{garden_type}'."}
             ],
-            max_tokens=200
+            max_tokens=200,
+            temperature=0.7
         )
         # Extraire la reformulation
-        reformulated_prompt = response['choices'][0]['message']['content'].strip()
+        reformulated_prompt = response.choices[0].message.content.strip()
         return reformulated_prompt
     except Exception as e:
         raise RuntimeError(f"Erreur lors de la reformulation : {e}")
