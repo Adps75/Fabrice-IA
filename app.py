@@ -13,8 +13,7 @@ app = Flask(__name__)
 CORS(app)  # Active CORS pour toutes les routes
 
 API_KEY = "bd9d52db77e424541731237a6c6763db"
-OPENAI_API_TOKEN = "OPENAI_API_TOKEN"
-
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 @app.route("/")
 def home():
