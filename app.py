@@ -41,6 +41,7 @@ def reformulate_prompt():
         data = request.get_json()
         user_prompt = data.get("user_prompt")
         garden_type = data.get("garden_type")
+        system_role = data.get("system_role")
 
         # 2) Vérifier la présence des champs requis
         if not user_prompt or not garden_type:
@@ -56,7 +57,7 @@ def reformulate_prompt():
             messages=[
                 {
                     "role": "system",
-                    "content": "Tu es un architecte paysagiste collaborant avec une IA de génération d'images. Ta mission est de traduire les idées des utilisateurs en descriptions précises et visuelles. Chaque description doit inclure des détails sur les plantes, les matériaux, les couleurs, et l'ambiance générale pour garantir un rendu fidèle."
+                    "content": {system_role}
                 },
                 {
                     "role": "user",
