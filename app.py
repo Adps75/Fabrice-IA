@@ -57,7 +57,7 @@ def reformulate_prompt():
             messages=[
                 {
                     "role": "system",
-                    "content": {system_role}
+                    "content": system_role
                 },
                 {
                     "role": "user",
