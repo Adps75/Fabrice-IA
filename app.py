@@ -56,7 +56,7 @@ def reformulate_prompt():
             messages=[
                 {
                     "role": "system",
-                    "content": "Tu es un expert en conception de jardin. Tu vas reformuler le prompt en intégrant le type de jardin choisi."
+                    "content": "Tu es un assistant expert en design et aménagement de jardins. Ton rôle est de reformuler les demandes des utilisateurs en prompts clairs, descriptifs et adaptés pour une IA de génération d'images. Chaque prompt doit refléter le style de jardin choisi et inclure les éléments demandés par l'utilisateur, tout en utilisant un langage détaillé et visuel. Assure-toi que le prompt soit suffisamment précis pour guider la génération d'une image réaliste et cohérente."
                 },
                 {
                     "role": "user",
