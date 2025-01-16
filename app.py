@@ -7,16 +7,13 @@ import json
 import os
 from yolo_handler import predict_objects  # Fonction pour YOLOv8
 from stable_diffusion_handler import generate_image_with_replicate # Fonction pour StableDiffusion
-from openai import OpenAI
+import openai
 
 app = Flask(__name__)
 CORS(app)  # Active CORS pour toutes les routes
 
 #Bubble API KEY
 API_KEY = "bd9d52db77e424541731237a6c6763db"
-
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-openai.organization = "org-IysEI7dzkeSD08g3ehdOzvIa"
 
 @app.route("/")
 def home():
@@ -26,38 +23,65 @@ def home():
 # Endpoint ChatGPT : /reformulate_prompt (reformule les prompts des utilisateurs)
 # =====================================================================================
 
-# Configurez la clé API OpenAI
+# Récupère la clé API OpenAI depuis la variable d'environnement sur Render
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 @app.route("/reformulate_prompt", methods=["POST"])
 def reformulate_prompt():
     """
-    Endpoint pour reformuler un prompt utilisateur en incluant un type de jardin.
+    Endpoint pour reformuler un prompt utilisateur en fonction du type de jardin.
+    Expects un JSON :
+    {
+      "user_prompt": "texte saisi par l'utilisateur",
+      "garden_type": "Jardin méditerranéen" (exemple)
+    }
     """
     try:
-        data = request.json
+        # 1) Extraire les données JSON
+        data = request.get_json()
         user_prompt = data.get("user_prompt")
         garden_type = data.get("garden_type")
 
+        # 2) Vérifier la présence des champs requis
         if not user_prompt or not garden_type:
-            return jsonify({"success": False, "message": "Paramètres manquants : user_prompt ou garden_type."}), 400
+            return jsonify({
+                "success": False,
+                "message": "Paramètres manquants : 'user_prompt' et 'garden_type' sont requis."
+            }), 400
 
-        # Appel à l'API OpenAI pour reformuler le prompt
+        # 3) Appel à l'API OpenAI (ChatGPT)
+        # 'role: system' = contexte ; 'role: user' = message utilisateur
         response = openai.ChatCompletion.create(
-            model="gpt-4",  # Vous pouvez utiliser "gpt-3.5-turbo" si nécessaire
+            model="gpt-3.5-turbo",  # ou "gpt-4" si vous y avez accès
             messages=[
-                {"role": "system", "content": "Tu es un assistant spécialisé dans la création de jardins."},
-                {"role": "user", "content": f"Type de jardin : {garden_type}. {user_prompt}"}
-            ]
+                {
+                    "role": "system",
+                    "content": "Tu es un expert en conception de jardin. Tu vas reformuler le prompt en intégrant le type de jardin choisi."
+                },
+                {
+                    "role": "user",
+                    "content": f"Type de jardin : {garden_type}.\nPrompt utilisateur : {user_prompt}"
+                }
+            ],
+            max_tokens=200,
+            temperature=0.7
         )
 
-        # Extraire le texte généré
-        reformulated_prompt = response["choices"][0]["message"]["content"]
+        # 4) Extraire la réponse générée
+        reformulated_prompt = response["choices"][0]["message"]["content"].strip()
 
-        return jsonify({"success": True, "reformulated_prompt": reformulated_prompt})
+        # 5) Retourner la réponse sous forme JSON
+        return jsonify({
+            "success": True,
+            "reformulated_prompt": reformulated_prompt
+        }), 200
 
     except Exception as e:
-        return jsonify({"success": False, "message": f"Erreur lors de la reformulation du prompt : {str(e)}"})
+        return jsonify({
+            "success": False,
+            "message": f"Erreur lors de la reformulation du prompt : {str(e)}"
+        }), 500
+
 
 # =====================================================================================
 # 1) Endpoint YOLOv8 : /detect_objects
