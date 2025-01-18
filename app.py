@@ -90,37 +90,45 @@ def reformulate_prompt():
 @app.route("/segment", methods=["POST"])
 def segment():
     try:
-        # Vérifier si une URL ou un fichier est fourni
+        # Récupérer l'URL de l'image depuis la requête
         image_url = request.form.get("image_url")
-        image_file = request.files.get("image")
 
-        if not image_url and not image_file:
-            return jsonify({"error": "Aucune image ou URL fournie."}), 400
+        if not image_url:
+            return jsonify({"error": "Aucune URL d'image fournie."}), 400
 
-        # Charger l'image depuis l'URL ou le fichier
-        if image_url:
-            response = requests.get(image_url)
-            response.raise_for_status()
-            image_bytes = io.BytesIO(response.content)
-        else:
-            image_bytes = image_file.read()
+        # Télécharger l'image depuis l'URL
+        response = requests.get(image_url)
+        response.raise_for_status()  # Vérifier si la requête a réussi
+        image_bytes = response.content
 
-        # Traiter l'image avec DeepLabV3
-        input_image, mask = process_image_with_deeplab(image_bytes)
+        # Charger l'image avec Pillow
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
-        # Retourner le masque (optionnel : convertir le masque en image PNG Base64)
-        mask_image = Image.fromarray((mask * 255).astype('uint8'))  # Convertir en binaire (0 ou 255)
+        # Préparer l'image pour le modèle
+        transformed_image = preprocess_image(image)  # Implémentez cette fonction pour DeepLabV3
+
+        # Effectuer la segmentation avec DeepLabV3
+        with torch.no_grad():
+            output = model(transformed_image)["out"][0]
+            mask = torch.argmax(output, dim=0).byte().cpu().numpy()
+
+        # Convertir le mask en une image PNG
+        mask_image = Image.fromarray(mask * 255)  # Multiplier pour avoir une échelle de 0-255
         buffer = io.BytesIO()
         mask_image.save(buffer, format="PNG")
         buffer.seek(0)
-        mask_base64 = buffer.getvalue().decode('latin1')  # Encode en Base64 pour Bubble
 
+        # Encodage du mask en base64
+        encoded_mask = buffer.getvalue().decode("latin1")
+
+        # Retourner le mask au client
         return jsonify({
             "success": True,
-            "message": "Image traitée avec succès.",
-            "mask_base64": mask_base64
+            "mask": encoded_mask
         })
 
+    except requests.exceptions.RequestException as req_err:
+        return jsonify({"error": f"Erreur lors du téléchargement de l'image : {str(req_err)}"}), 400
     except Exception as e:
         return jsonify({"error": f"Erreur lors du traitement de l'image : {str(e)}"}), 500
 
