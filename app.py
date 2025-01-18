@@ -9,7 +9,7 @@ import uvicorn
 app = FastAPI()
 
 # Configurez votre clé API OpenAI et Stable Diffusion
-openai.api_key = "OPENAI_API_KEY"
+openai.api_key = os.getenv("OPENAI_API_KEY")
 REPLICATE_API_TOKEN = "REPLICATE_API_TOKEN"
 
 class GenerateImageRequest(BaseModel):
