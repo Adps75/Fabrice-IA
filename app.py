@@ -65,3 +65,8 @@ async def generate_image(request: GenerateImageRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur lors de la génération de l'image : {str(e)}")
+
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
+
