@@ -22,13 +22,28 @@ model = models.segmentation.deeplabv3_resnet101(pretrained=True)
 model.eval()  # Mode évaluation pour l'inférence
 
 
-def process_image(image_bytes):
+def process_image_with_deeplab(image_bytes):
     """
-    Prépare l'image pour DeepLabV3.
+    Traite une image avec DeepLabV3 pour générer un masque.
+    Retourne l'image d'entrée et le masque binaire correspondant.
     """
-    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    image_tensor = F.to_tensor(image).unsqueeze(0)  # Ajouter une dimension batch
-    return image, image_tensor
+    input_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+
+    # Préparer l'image pour le modèle
+    preprocess = T.Compose([
+        T.Resize((512, 512)),
+        T.ToTensor(),
+        T.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+    ])
+    input_tensor = preprocess(input_image).unsqueeze(0)
+
+    # Inférence avec le modèle
+    with torch.no_grad():
+        output = model(input_tensor)['out'][0]
+        mask = output.argmax(0).byte().cpu().numpy()
+
+    # Retourne l'image et le masque
+    return input_image, mask
 
 
 @app.route("/reformulate_prompt", methods=["POST"])
@@ -74,41 +89,40 @@ def reformulate_prompt():
 
 @app.route("/segment", methods=["POST"])
 def segment():
-    """
-    Segmente une image pour générer un masque.
-    """
     try:
-        if 'image' not in request.files:
-            return jsonify({"error": "Aucune image fournie."}), 400
+        # Vérifier si une URL ou un fichier est fourni
+        image_url = request.form.get("image_url")
+        image_file = request.files.get("image")
 
-        image_file = request.files['image']
-        image_bytes = image_file.read()
-        original_image, image_tensor = process_image(image_bytes)
+        if not image_url and not image_file:
+            return jsonify({"error": "Aucune image ou URL fournie."}), 400
 
-        with torch.no_grad():
-            output = model(image_tensor)['out'][0]
+        # Charger l'image depuis l'URL ou le fichier
+        if image_url:
+            response = requests.get(image_url)
+            response.raise_for_status()
+            image_bytes = io.BytesIO(response.content)
+        else:
+            image_bytes = image_file.read()
 
-        # Convertir les scores en une segmentation binaire
-        mask = output.argmax(0).byte().cpu().numpy()
+        # Traiter l'image avec DeepLabV3
+        input_image, mask = process_image_with_deeplab(image_bytes)
 
-        # Convertir le masque en image PIL
-        mask_image = Image.fromarray((mask * 255).astype(np.uint8))
-
-        # Sauvegarder le masque en mémoire
+        # Retourner le masque (optionnel : convertir le masque en image PNG Base64)
+        mask_image = Image.fromarray((mask * 255).astype('uint8'))  # Convertir en binaire (0 ou 255)
         buffer = io.BytesIO()
         mask_image.save(buffer, format="PNG")
         buffer.seek(0)
-
-        # Retourner le masque encodé en base64
-        mask_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        mask_base64 = buffer.getvalue().decode('latin1')  # Encode en Base64 pour Bubble
 
         return jsonify({
             "success": True,
-            "mask": mask_base64
+            "message": "Image traitée avec succès.",
+            "mask_base64": mask_base64
         })
 
     except Exception as e:
-        return jsonify({"error": f"Erreur lors de la segmentation de l'image : {str(e)}"}), 500
+        return jsonify({"error": f"Erreur lors du traitement de l'image : {str(e)}"}), 500
 
 
 @app.route("/generate_image", methods=["POST"])
