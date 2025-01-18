@@ -2,90 +2,58 @@ from flask import Flask, request, jsonify
 from PIL import Image
 import io
 import torch
-import torchvision
+from torchvision import models
 from torchvision.transforms import functional as F
-import openai
 import requests
 import os
+import base64
+import numpy as np
+import openai
 
 # Initialisation de l'application Flask
 app = Flask(__name__)
 
-# Charger le modèle pré-entraîné Mask R-CNN
-model = torchvision.models.detection.maskrcnn_resnet50_fpn(pretrained=True)
-model.eval()  # Mode évaluation pour l'inférence
-
-# Configuration des clés API
+# Configuration des API keys
 openai.api_key = os.getenv("OPENAI_API_KEY")
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 
+# Charger le modèle pré-entraîné DeepLabV3
+model = models.segmentation.deeplabv3_resnet101(pretrained=True)
+model.eval()  # Mode évaluation pour l'inférence
+
+
 def process_image(image_bytes):
     """
-    Prépare l'image pour le modèle Mask R-CNN.
+    Prépare l'image pour DeepLabV3.
     """
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    image_tensor = F.to_tensor(image)  # Convertir l'image en tenseur (C, H, W)
+    image_tensor = F.to_tensor(image).unsqueeze(0)  # Ajouter une dimension batch
     return image, image_tensor
 
-@app.route("/process", methods=["POST"])
-def process():
+
+@app.route("/reformulate_prompt", methods=["POST"])
+def reformulate_prompt():
     """
-    Endpoint pour traiter une image avec Mask R-CNN.
-    """
-    try:
-        # Vérifier si le fichier est fourni
-        if 'image' not in request.files:
-            return jsonify({"error": "Aucune image fournie."}), 400
-
-        # Lire l'image et la convertir en tenseur
-        image_file = request.files['image']
-        image_bytes = image_file.read()
-        original_image, image_tensor = process_image(image_bytes)
-
-        # Ajouter une dimension batch et effectuer l'inférence
-        with torch.no_grad():
-            predictions = model([image_tensor])
-
-        # Traiter les résultats
-        result = []
-        for i, box in enumerate(predictions[0]['boxes']):
-            score = predictions[0]['scores'][i].item()
-            if score >= 0.5:  # Seulement les détections avec une confiance >= 50%
-                box = box.tolist()  # Convertir les coordonnées en liste
-                mask = predictions[0]['masks'][i, 0].mul(255).byte().cpu().numpy()
-                result.append({
-                    "box": box,
-                    "score": score,
-                    "mask": mask.tolist(),
-                })
-
-        return jsonify({"success": True, "predictions": result})
-
-    except Exception as e:
-        return jsonify({"error": f"Erreur lors du traitement de l'image : {str(e)}"}), 500
-
-@app.route("/generate_image", methods=["POST"])
-def generate_image():
-    """
-    Endpoint pour générer une image en utilisant Stable Diffusion.
+    Reformule un prompt utilisateur en fonction du type de jardin.
     """
     try:
-        # Extraire les données JSON
-        data = request.get_json()
-        image_url = data.get("image_url")
-        garden_style = data.get("garden_style")
+        data = request.json
+        if not data:
+            return jsonify({"error": "Le corps de la requête est vide."}), 400
+
         user_prompt = data.get("user_prompt")
+        garden_type = data.get("garden_type")
 
-        if not image_url or not garden_style or not user_prompt:
-            return jsonify({"error": "Paramètres manquants : 'image_url', 'garden_style', et 'user_prompt' sont requis."}), 400
+        if not user_prompt or not garden_type:
+            return jsonify({"error": "Paramètres manquants : 'user_prompt' et 'garden_type' sont requis."}), 400
 
-        # Reformuler le prompt utilisateur avec OpenAI
-        openai_response = openai.ChatCompletion.create(
+        # Appel à l'API OpenAI
+        response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
                 {
                     "role": "system",
-                    "content": f"Tu es un architecte paysagiste collaborant avec une IA de génération d'images. Ta mission est de traduire les idées des utilisateurs en prompts précis pour générer un jardin de style {garden_style}."
+                    "content": f"Tu es un architecte paysagiste collaborant avec une IA. Reformule les prompts pour générer un jardin de style {garden_type}."
                 },
                 {
                     "role": "user",
@@ -93,15 +61,83 @@ def generate_image():
                 }
             ]
         )
-        reformulated_prompt = openai_response.choices[0].message.content.strip()
 
-        # Préparer les données pour l'API de Stable Diffusion
+        reformulated_prompt = response.choices[0].message.content.strip()
+        return jsonify({
+            "success": True,
+            "reformulated_prompt": reformulated_prompt
+        })
+
+    except Exception as e:
+        return jsonify({"error": f"Erreur lors de la reformulation du prompt : {str(e)}"}), 500
+
+
+@app.route("/segment", methods=["POST"])
+def segment():
+    """
+    Segmente une image pour générer un masque.
+    """
+    try:
+        if 'image' not in request.files:
+            return jsonify({"error": "Aucune image fournie."}), 400
+
+        image_file = request.files['image']
+        image_bytes = image_file.read()
+        original_image, image_tensor = process_image(image_bytes)
+
+        with torch.no_grad():
+            output = model(image_tensor)['out'][0]
+
+        # Convertir les scores en une segmentation binaire
+        mask = output.argmax(0).byte().cpu().numpy()
+
+        # Convertir le masque en image PIL
+        mask_image = Image.fromarray((mask * 255).astype(np.uint8))
+
+        # Sauvegarder le masque en mémoire
+        buffer = io.BytesIO()
+        mask_image.save(buffer, format="PNG")
+        buffer.seek(0)
+
+        # Retourner le masque encodé en base64
+        mask_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+        return jsonify({
+            "success": True,
+            "mask": mask_base64
+        })
+
+    except Exception as e:
+        return jsonify({"error": f"Erreur lors de la segmentation de l'image : {str(e)}"}), 500
+
+
+@app.route("/generate_image", methods=["POST"])
+def generate_image():
+    """
+    Génère une image avec Stable Diffusion via Replicate.
+    """
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"error": "Le corps de la requête est vide."}), 400
+
+        image_url = data.get("image_url")
+        mask_base64 = data.get("mask_base64")
+        prompt = data.get("prompt")
+
+        if not image_url or not mask_base64 or not prompt:
+            return jsonify({"error": "Paramètres manquants : 'image_url', 'mask_base64', ou 'prompt'."}), 400
+
+        # Convertir le masque base64 en bytes
+        mask_bytes = base64.b64decode(mask_base64)
+
+        # Préparer les données pour Stable Diffusion
         replicate_payload = {
             "version": "stability-ai/stable-diffusion-inpainting",
             "input": {
                 "image": image_url,
-                "mask": mask_url,
-                "prompt": reformulated_prompt
+                "mask": mask_bytes.decode('latin1'),  # Convertir en format compatible
+                "prompt": prompt
             }
         }
         headers = {
@@ -118,14 +154,18 @@ def generate_image():
         response_data = response.json()
 
         if response.status_code != 200:
-            return jsonify({"error": response_data.get("error", "Erreur API Stable Diffusion")}), 500
+            return jsonify({"error": response_data.get("detail", "Erreur API Stable Diffusion.")}), 500
 
-        # Retourner l'image générée
+        # Retourner l'URL de l'image générée
         generated_image_url = response_data["output"]
-        return jsonify({"success": True, "generated_image_url": generated_image_url})
+        return jsonify({
+            "success": True,
+            "generated_image_url": generated_image_url
+        })
 
     except Exception as e:
         return jsonify({"error": f"Erreur lors de la génération de l'image : {str(e)}"}), 500
+
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
