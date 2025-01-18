@@ -8,3 +8,5 @@ replicate
 openai==0.28.0
 numpy
 tensorflow
+fastapi
+uvicorn
