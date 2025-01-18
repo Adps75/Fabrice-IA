@@ -3,6 +3,7 @@ from pydantic import BaseModel
 import openai
 import requests
 from io import BytesIO
+import os
 
 app = FastAPI()
 
