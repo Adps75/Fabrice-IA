@@ -4,6 +4,7 @@ import openai
 import requests
 from io import BytesIO
 import os
+import uvicorn
 
 app = FastAPI()
 
