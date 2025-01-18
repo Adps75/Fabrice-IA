@@ -9,6 +9,7 @@ import os
 import base64
 import numpy as np
 import openai
+from torchvision import models, transforms
 
 # Initialisation de l'application Flask
 app = Flask(__name__)
@@ -21,29 +22,16 @@ REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 model = models.segmentation.deeplabv3_resnet101(pretrained=True)
 model.eval()  # Mode évaluation pour l'inférence
 
-
-def process_image_with_deeplab(image_bytes):
+def preprocess_image(image):
     """
-    Traite une image avec DeepLabV3 pour générer un masque.
-    Retourne l'image d'entrée et le masque binaire correspondant.
+    Prépare l'image pour DeepLabV3 : redimensionnement, normalisation et conversion en tenseur.
     """
-    input_image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-
-    # Préparer l'image pour le modèle
-    preprocess = T.Compose([
-        T.Resize((512, 512)),
-        T.ToTensor(),
-        T.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+    preprocess = transforms.Compose([
+        transforms.Resize((512, 512)),  # Redimensionner l'image à une taille fixe
+        transforms.ToTensor(),  # Convertir en tenseur
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # Normalisation standard pour ImageNet
     ])
-    input_tensor = preprocess(input_image).unsqueeze(0)
-
-    # Inférence avec le modèle
-    with torch.no_grad():
-        output = model(input_tensor)['out'][0]
-        mask = output.argmax(0).byte().cpu().numpy()
-
-    # Retourne l'image et le masque
-    return input_image, mask
+    return preprocess(image).unsqueeze(0)  # Ajouter une dimension batch
 
 
 @app.route("/reformulate_prompt", methods=["POST"])
