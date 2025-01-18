@@ -8,6 +8,10 @@ import os
 from yolo_handler import predict_objects  # Fonction pour YOLOv8
 from stable_diffusion_handler import generate_image_with_replicate # Fonction pour StableDiffusion
 import openai
+import cv2
+import numpy as np
+from io import BytesIO
+import base64
 
 app = Flask(__name__)
 CORS(app)  # Active CORS pour toutes les routes
@@ -18,6 +22,64 @@ API_KEY = "bd9d52db77e424541731237a6c6763db"
 @app.route("/")
 def home():
     return "Bienvenue sur l'éditeur Python pour Bubble (YOLOv8 + Annotations) !"
+    
+# =====================================================================================
+# Endpoint selection polygone
+# =====================================================================================
+
+@app.route("/flood_fill", methods=["POST"])
+def flood_fill():
+    """
+    Endpoint Flood Fill pour créer un masque basé sur un point de départ.
+    Expects:
+    {
+        "image": "base64_encoded_image",
+        "seed_point": [x, y],
+        "tolerance": [loDiff, upDiff] (facultatif)
+    }
+    Returns:
+        Base64 encoded mask image.
+    """
+    try:
+        # Récupérer les données
+        data = request.json
+        image_b64 = data["image"]
+        seed_point = tuple(data["seed_point"])
+        tolerance = data.get("tolerance", [10, 10, 10])
+
+        # Décoder l'image
+        image_data = base64.b64decode(image_b64)
+        np_image = np.array(Image.open(BytesIO(image_data)).convert("RGB"))
+
+        # Préparer le masque Flood Fill
+        mask = np.zeros((np_image.shape[0] + 2, np_image.shape[1] + 2), np.uint8)
+        flood_fill_flags = 4 | cv2.FLOODFILL_MASK_ONLY | (255 << 8)
+
+        # Appliquer Flood Fill
+        cv2.floodFill(
+            np_image,
+            mask,
+            seedPoint=seed_point,
+            newVal=(255, 255, 255),
+            loDiff=tolerance,
+            upDiff=tolerance,
+            flags=flood_fill_flags,
+        )
+
+        # Convertir le masque en image
+        mask = mask[1:-1, 1:-1]  # Retirer les bordures ajoutées par Flood Fill
+        mask_image = Image.fromarray((mask * 255).astype(np.uint8))
+
+        # Encoder l'image en base64
+        buffered = BytesIO()
+        mask_image.save(buffered, format="PNG")
+        mask_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+
+        return jsonify({"success": True, "mask": mask_b64}), 200
+
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
 
 # =====================================================================================
 # Endpoint ChatGPT : /reformulate_prompt (reformule les prompts des utilisateurs)
