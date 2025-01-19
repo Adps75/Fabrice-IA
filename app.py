@@ -73,6 +73,61 @@ def reformulate_prompt():
 
     except Exception as e:
         return jsonify({"error": f"Erreur lors de la reformulation du prompt : {str(e)}"}), 500
+@app.route("/segment_by_click", methods=["POST"])
+def segment_by_click():
+    try:
+        # Récupérer les paramètres depuis la requête
+        image_url = request.form.get("image_url")
+        x_percent = float(request.form.get("x_percent"))
+        y_percent = float(request.form.get("y_percent"))
+
+        if not image_url:
+            return jsonify({"error": "Aucune URL d'image fournie."}), 400
+        
+        # Télécharger l'image
+        response = requests.get(image_url)
+        response.raise_for_status()
+        image_bytes = response.content
+
+        # Charger l'image
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        
+        # Redimensionnement à 512x512 pour DeepLabV3
+        resized_image = image.resize((512, 512), Image.BILINEAR)
+
+        # Préparer l'image pour le modèle
+        transformed_image = preprocess_image(resized_image)  # à partir du code existant
+
+        # Effectuer la segmentation
+        with torch.no_grad():
+            output = model(transformed_image)["out"][0]
+            seg_map = torch.argmax(output, dim=0).byte().cpu().numpy()  # 512x512 classes
+
+        # Convertir x_percent, y_percent en coordonnées (0-511)
+        click_x = int(x_percent * 512)
+        click_y = int(y_percent * 512)
+        
+        # Classe du pixel cliqué
+        clicked_class = seg_map[click_y, click_x]
+
+        # Générer un masque binaire où seg_map == clicked_class
+        binary_mask = np.where(seg_map == clicked_class, 255, 0).astype(np.uint8)
+
+        # Convertir le masque en image
+        mask_image = Image.fromarray(binary_mask)
+
+        # Encoder en base64 (PNG)
+        buffer = io.BytesIO()
+        mask_image.save(buffer, format="PNG")
+        buffer.seek(0)
+        
+        # base64 standard
+        encoded_mask = base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+        return jsonify({"success": True, "mask_base64": encoded_mask})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/segment", methods=["POST"])
