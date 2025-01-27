@@ -70,16 +70,16 @@ def generate_image():
 
         # Préparer les données pour Stable Diffusion XL
         replicate_payload = {
-            "version": "lucataco/sdxl-inpainting",
+            "version": "lucataco/sdxl-inpainting:a5b13068cc81a89a4fbeefeccc774869fcb34df4dbc92c1555e0f2771d49dde7",
             "input": {
                 "image": image_url,
                 "mask": "data:image/png;base64," + mask_base64,
                 "prompt": prompt,
-                "steps": 50,  # Augmenter pour plus de détails
-                "guidance_scale": 7.5,  # Équilibre entre fidélité et créativité
-                "seed": 42,  # Pour des résultats reproductibles
+                "steps": 50,
+                "guidance_scale": 7.5,
+                "seed": 42,
                 "negative_prompt": "low quality, unrealistic, bad composition, blurry, monochrome",
-                "strength": 0.75  # Permet de conserver une bonne structure de l'image d'origine
+                "strength": 0.75
             }
         }
 
@@ -111,6 +111,7 @@ def generate_image():
 
     except Exception as e:
         return jsonify({"error": f"Erreur lors de la génération de l'image : {str(e)}"}), 500
+
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
