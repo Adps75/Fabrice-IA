@@ -1,15 +1,8 @@
 from flask import Flask, request, jsonify
-from PIL import Image
-import io
-import torch
-from torchvision import models
-from torchvision.transforms import functional as F
 import requests
 import os
 import base64
-import numpy as np
 import openai
-from torchvision import models, transforms
 
 # Initialisation de l'application Flask
 app = Flask(__name__)
@@ -17,22 +10,6 @@ app = Flask(__name__)
 # Configuration des API keys
 openai.api_key = os.getenv("OPENAI_API_KEY")
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
-
-# Charger le modèle pré-entraîné DeepLabV3
-model = models.segmentation.deeplabv3_resnet101(pretrained=True)
-model.eval()  # Mode évaluation pour l'inférence
-
-def preprocess_image(image):
-    """
-    Prépare l'image pour DeepLabV3 : redimensionnement, normalisation et conversion en tenseur.
-    """
-    preprocess = transforms.Compose([
-        transforms.Resize((512, 512)),  # Redimensionner l'image à une taille fixe
-        transforms.ToTensor(),  # Convertir en tenseur
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # Normalisation standard pour ImageNet
-    ])
-    return preprocess(image).unsqueeze(0)  # Ajouter une dimension batch
-
 
 @app.route("/reformulate_prompt", methods=["POST"])
 def reformulate_prompt():
@@ -56,7 +33,7 @@ def reformulate_prompt():
             messages=[
                 {
                     "role": "system",
-                    "content": f"Tu es un architecte paysagiste collaborant avec une IA. Reformule les prompts pour générer un jardin de style {garden_type}."
+                    "content": f"Tu es un architecte paysagiste collaborant avec une IA. Reformule les prompts pour générer un jardin de style {garden_type} avec des détails réalistes et cohérents."
                 },
                 {
                     "role": "user",
@@ -73,113 +50,11 @@ def reformulate_prompt():
 
     except Exception as e:
         return jsonify({"error": f"Erreur lors de la reformulation du prompt : {str(e)}"}), 500
-@app.route("/segment_by_click", methods=["POST"])
-def segment_by_click():
-    try:
-        # Récupérer les paramètres depuis la requête
-        image_url = request.form.get("image_url")
-        x_percent = float(request.form.get("x_percent"))
-        y_percent = float(request.form.get("y_percent"))
-
-        if not image_url:
-            return jsonify({"error": "Aucune URL d'image fournie."}), 400
-        
-        # Télécharger l'image
-        response = requests.get(image_url)
-        response.raise_for_status()
-        image_bytes = response.content
-
-        # Charger l'image
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        
-        # Redimensionnement à 512x512 pour DeepLabV3
-        resized_image = image.resize((512, 512), Image.BILINEAR)
-
-        # Préparer l'image pour le modèle
-        transformed_image = preprocess_image(resized_image)  # à partir du code existant
-
-        # Effectuer la segmentation
-        with torch.no_grad():
-            output = model(transformed_image)["out"][0]
-            seg_map = torch.argmax(output, dim=0).byte().cpu().numpy()  # 512x512 classes
-
-        # Convertir x_percent, y_percent en coordonnées (0-511)
-        click_x = int(x_percent * 512)
-        click_y = int(y_percent * 512)
-        
-        # Classe du pixel cliqué
-        clicked_class = seg_map[click_y, click_x]
-
-        # Générer un masque binaire où seg_map == clicked_class
-        binary_mask = np.where(seg_map == clicked_class, 255, 0).astype(np.uint8)
-
-        # Convertir le masque en image
-        mask_image = Image.fromarray(binary_mask)
-
-        # Encoder en base64 (PNG)
-        buffer = io.BytesIO()
-        mask_image.save(buffer, format="PNG")
-        buffer.seek(0)
-        
-        # base64 standard
-        encoded_mask = base64.b64encode(buffer.getvalue()).decode("utf-8")
-
-        return jsonify({"success": True, "mask_base64": encoded_mask})
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/segment", methods=["POST"])
-def segment():
-    try:
-        # Récupérer l'URL de l'image depuis la requête
-        image_url = request.form.get("image_url")
-
-        if not image_url:
-            return jsonify({"error": "Aucune URL d'image fournie."}), 400
-
-        # Télécharger l'image depuis l'URL
-        response = requests.get(image_url)
-        response.raise_for_status()  # Vérifier si la requête a réussi
-        image_bytes = response.content
-
-        # Charger l'image avec Pillow
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-
-        # Préparer l'image pour le modèle
-        transformed_image = preprocess_image(image)  # Implémentez cette fonction pour DeepLabV3
-
-        # Effectuer la segmentation avec DeepLabV3
-        with torch.no_grad():
-            output = model(transformed_image)["out"][0]
-            mask = torch.argmax(output, dim=0).byte().cpu().numpy()
-
-        # Convertir le mask en une image PNG
-        mask_image = Image.fromarray(mask * 255)  # Multiplier pour avoir une échelle de 0-255
-        buffer = io.BytesIO()
-        mask_image.save(buffer, format="PNG")
-        buffer.seek(0)
-
-        # Encodage du mask en base64
-        encoded_mask = buffer.getvalue().decode("latin1")
-
-        # Retourner le mask au client
-        return jsonify({
-            "success": True,
-            "mask": encoded_mask
-        })
-
-    except requests.exceptions.RequestException as req_err:
-        return jsonify({"error": f"Erreur lors du téléchargement de l'image : {str(req_err)}"}), 400
-    except Exception as e:
-        return jsonify({"error": f"Erreur lors du traitement de l'image : {str(e)}"}), 500
-
 
 @app.route("/generate_image", methods=["POST"])
 def generate_image():
     """
-    Génère une image avec Stable Diffusion via Replicate.
+    Génère une image avec Stable Diffusion XL via Replicate.
     """
     try:
         data = request.json
@@ -193,24 +68,27 @@ def generate_image():
         if not image_url or not mask_base64 or not prompt:
             return jsonify({"error": "Paramètres manquants : 'image_url', 'mask_base64', ou 'prompt'."}), 400
 
-        # Convertir le masque base64 en bytes
-        mask_bytes = base64.b64decode(mask_base64)
-
-        # Préparer les données pour Stable Diffusion
+        # Préparer les données pour Stable Diffusion XL
         replicate_payload = {
-            "version": "stability-ai/stable-diffusion-inpainting",
+            "version": "lucataco/sdxl-inpainting",
             "input": {
                 "image": image_url,
-                "mask": mask_bytes.decode('latin1'),  # Convertir en format compatible
-                "prompt": prompt
+                "mask": "data:image/png;base64," + mask_base64,
+                "prompt": prompt,
+                "steps": 50,  # Augmenter pour plus de détails
+                "guidance_scale": 7.5,  # Équilibre entre fidélité et créativité
+                "seed": 42,  # Pour des résultats reproductibles
+                "negative_prompt": "low quality, unrealistic, bad composition, blurry, monochrome",
+                "strength": 0.75  # Permet de conserver une bonne structure de l'image d'origine
             }
         }
+
         headers = {
             "Authorization": f"Token {REPLICATE_API_TOKEN}",
             "Content-Type": "application/json"
         }
 
-        # Appeler l'API Stable Diffusion
+        # Appeler l'API Stable Diffusion XL
         response = requests.post(
             "https://api.replicate.com/v1/predictions",
             headers=headers,
@@ -222,7 +100,10 @@ def generate_image():
             return jsonify({"error": response_data.get("detail", "Erreur API Stable Diffusion.")}), 500
 
         # Retourner l'URL de l'image générée
-        generated_image_url = response_data["output"]
+        generated_image_url = response_data.get("output", [None])[0]
+        if not generated_image_url:
+            return jsonify({"error": "Erreur lors de la récupération de l'image générée."}), 500
+
         return jsonify({
             "success": True,
             "generated_image_url": generated_image_url
@@ -230,7 +111,6 @@ def generate_image():
 
     except Exception as e:
         return jsonify({"error": f"Erreur lors de la génération de l'image : {str(e)}"}), 500
-
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
